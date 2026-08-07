@@ -21,9 +21,13 @@ struct SpawnVolume {
 
     /// Roughly chest height, half a metre out, about an arm-span wide.
     /// Sighting values only — tune them on device.
+    ///
+    /// Depth is 35 cm rather than a token amount because difficulty uses it as
+    /// a real axis: level 2 adds forward distance to demand elbow extension,
+    /// and a 25 cm box left barely 10 cm of travel to work with.
     static let fixed = SpawnVolume(
         center: [0, 1.25, -0.55],
-        size:   [0.80, 0.60, 0.25]
+        size:   [0.80, 0.60, 0.35]
     )
 
     var minBound: SIMD3<Float> { center - size / 2 }

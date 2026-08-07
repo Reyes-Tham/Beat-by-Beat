@@ -65,6 +65,11 @@ class AppModel {
 
     /// Fake palm position in unit-cube space, or nil before the first drag.
     var simulatedPalmUnit: SIMD3<Float>?
+    /// Depth of the fake palm. Needs its own control: the pad only has two
+    /// axes, and a palm pinned to mid-depth can't reach the volume's faces.
+    var simulatedPalmDepth: Float = 0.75 {
+        didSet { simulatedPalmUnit?.z = simulatedPalmDepth }
+    }
 
     /// Gates the simulator-only affordances, so the toggle can't be left on
     /// during a device demo.

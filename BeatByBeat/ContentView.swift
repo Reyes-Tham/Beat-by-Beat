@@ -265,7 +265,10 @@ struct ContentView: View {
     /// spawn volume. Lives here rather than in the immersive space because an
     /// input-targetable entity floating in front of the player intercepts every
     /// pinch meant for this window.
+    @ViewBuilder
     private var handPad: some View {
+        @Bindable var appModel = appModel
+
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 12)
@@ -297,12 +300,18 @@ struct ContentView: View {
                     appModel.simulatedPalmUnit = SIMD3(
                         min(max(x, 0), 1),
                         min(max(y, 0), 1),
-                        0.5  // mid-depth; the stand-in's larger radius covers the rest
+                        appModel.simulatedPalmDepth
                     )
                 }
             )
         }
         .frame(height: 140)
+
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Hand depth: \(Int(appModel.simulatedPalmDepth * 100))% forward")
+                .font(.caption)
+            Slider(value: $appModel.simulatedPalmDepth, in: 0...1)
+        }
     }
 
     // MARK: - Readouts
