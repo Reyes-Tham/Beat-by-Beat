@@ -234,6 +234,7 @@ final class TargetField {
                 travelTime: component.travelTime
             )
             judgements[judgement, default: 0] += 1
+            showPraise(judgement, at: target.position)
         }
         onScoreChange?()
 
@@ -254,6 +255,20 @@ final class TargetField {
             // believe a spawn was still pending and never top the field up.
             self.pendingSpawns = max(0, self.pendingSpawns - 1)
             self.refill(avoiding: self.lastPalms)
+        }
+    }
+
+    /// Pops praise above a reached target. Parented to the field root, not the
+    /// target, so it survives the target being torn down under it.
+    private func showPraise(_ judgement: Judgement, at position: SIMD3<Float>) {
+        let label = TargetEntity.makePraiseLabel(for: judgement)
+        label.position = position + [0, TargetEntity.defaultRadius + 0.05, 0]
+        root.addChild(label)
+        TargetEntity.playPraiseAnimation(on: label)
+
+        Task {
+            try? await Task.sleep(for: .seconds(TargetEntity.praiseSeconds))
+            TargetEntity.destroy(label)
         }
     }
 

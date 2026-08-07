@@ -133,6 +133,19 @@ enum Judgement: String, CaseIterable, Codable {
         case .reached: "Reached"
         }
     }
+
+    /// What the player sees pop up on a hit.
+    ///
+    /// The weakest tier still reads as success: they got their arm there,
+    /// which is the movement goal. Only the rhythm was loose, and that isn't
+    /// worth telling a patient off about.
+    var praise: String {
+        switch self {
+        case .excellent: "Excellent!"
+        case .good: "Good!"
+        case .reached: "Okay!"
+        }
+    }
 }
 
 /// Outcome of a single note. Kept separate from `Judgement` because reaching

@@ -100,11 +100,39 @@ enum TargetEntity {
         collapsed.scale = .init(repeating: approachEndScale)
         shell.move(to: collapsed, relativeTo: target, duration: travelTime, timingFunction: .linear)
 
-        // Once it has arrived it has said everything it can, and leaving a
-        // transparent shell wrapped around the target only adds sorting work.
+        // Dissolve rather than pop. The fade starts shortly *before* the beat
+        // and finishes just after it, so the shell is still visible at the
+        // moment of arrival — fading it out earlier would erase the very cue
+        // it exists to give.
+        let lead = min(0.30, travelTime * 0.2)
         Task {
-            try? await Task.sleep(for: .seconds(travelTime))
+            try? await Task.sleep(for: .seconds(max(0, travelTime - lead)))
+            guard let shell = target.findEntity(named: "ApproachShell") else { return }
+            fade(shell, to: 0, duration: lead + 0.25)
+            try? await Task.sleep(for: .seconds(lead + 0.25))
             removeApproachShell(from: target)
+        }
+    }
+
+    /// Animates an entity's overall opacity. `OpacityComponent` scales whatever
+    /// the material already does, so a 34%-opaque shell fades 34% → 0.
+    static func fade(_ entity: Entity, to opacity: Float, duration: TimeInterval) {
+        let current = entity.components[OpacityComponent.self]?.opacity ?? 1
+        entity.components.set(OpacityComponent(opacity: current))
+
+        let animation = FromToByAnimation(
+            name: "fade",
+            from: current,
+            to: opacity,
+            duration: duration,
+            timing: .easeOut,
+            bindTarget: .opacity
+        )
+        if let resource = try? AnimationResource.generate(with: animation) {
+            entity.playAnimation(resource)
+        } else {
+            // Better a hard cut than a shell that never leaves.
+            entity.components.set(OpacityComponent(opacity: opacity))
         }
     }
 
@@ -114,6 +142,54 @@ enum TargetEntity {
         guard let shell = target.findEntity(named: "ApproachShell") else { return }
         shell.stopAllAnimations()
         shell.removeFromParent()
+    }
+
+    nonisolated static let praiseSeconds: TimeInterval = 0.9
+
+    /// Floating praise for a hit — rises out of the target and dissolves.
+    ///
+    /// Billboarded so it stays readable wherever the player is looking, and
+    /// unlit so it doesn't dim in a dark room.
+    static func makePraiseLabel(for judgement: Judgement) -> Entity {
+        let root = Entity()
+        root.name = "Praise"
+
+        let mesh = MeshResource.generateText(
+            judgement.praise,
+            extrusionDepth: 0.001,
+            font: .systemFont(ofSize: 0.055, weight: .semibold),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byTruncatingTail
+        )
+        let text = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: praiseTint(judgement))])
+        // generateText lays out from the baseline's left edge, so the mesh has
+        // to be shifted back onto the anchor to sit over the target.
+        let bounds = text.visualBounds(relativeTo: nil)
+        text.position = -bounds.center
+        root.addChild(text)
+
+        root.components.set(BillboardComponent())
+        return root
+    }
+
+    /// Rises and fades. Caller destroys it after `praiseSeconds`.
+    static func playPraiseAnimation(on entity: Entity) {
+        var risen = entity.transform
+        risen.translation.y += 0.14
+        entity.move(to: risen, relativeTo: entity.parent,
+                    duration: praiseSeconds, timingFunction: .easeOut)
+        fade(entity, to: 0, duration: praiseSeconds)
+    }
+
+    private static func praiseTint(_ judgement: Judgement) -> UIColor {
+        // Deliberately off the hand palette (cyan / amber) so praise can never
+        // be mistaken for a which-arm cue.
+        switch judgement {
+        case .excellent: UIColor(red: 1.00, green: 0.86, blue: 0.30, alpha: 1)  // gold
+        case .good:      UIColor(white: 1.00, alpha: 1)                          // white
+        case .reached:   UIColor(white: 0.72, alpha: 1)                          // soft grey
+        }
     }
 
     /// Tears an entity down completely.
