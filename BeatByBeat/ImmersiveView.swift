@@ -10,6 +10,8 @@ struct ImmersiveView: View {
     @Environment(AppModel.self) var appModel
 
     @State private var handTracking = HandTrackingManager()
+    @State private var conductor = AudioConductor()
+    @State private var scheduler = BeatScheduler()
     @State private var field: TargetField?
     @State private var proxyMarkers: [TrainingHand: Entity] = [:]
 
@@ -24,7 +26,7 @@ struct ImmersiveView: View {
             content.add(root)
 
             let field = TargetField(root: root)
-            field.onHit = { appModel.hitCount = field.hitCount }
+            field.onScoreChange = { publishScore(field) }
             self.field = field
             configure(field)
 
@@ -34,6 +36,12 @@ struct ImmersiveView: View {
                 content.add(marker)
                 proxyMarkers[hand] = marker
             }
+
+            // Frame tick: spawning and expiry are driven by song time, which
+            // moves independently of whether the hands are being tracked.
+            _ = content.subscribe(to: SceneEvents.Update.self) { _ in
+                tick()
+            }
         }
         .task {
             // Every hand update is also a hit-test tick — no separate timer.
@@ -41,7 +49,14 @@ struct ImmersiveView: View {
             await handTracking.start()
             appModel.handTrackingStatus = handTracking.status
         }
-        .onDisappear { handTracking.stop() }
+        .onDisappear {
+            handTracking.stop()
+            conductor.stop()
+        }
+        .onChange(of: appModel.isPlaying) { startOrStop() }
+        .onChange(of: appModel.mode) { configure() }
+        .onChange(of: appModel.level) { configure() }
+        .onChange(of: appModel.bpm) { configure() }
         .onChange(of: appModel.respawnRequests) { configure() }
         .onChange(of: appModel.layout) { configure() }
         .onChange(of: appModel.trainingHand) { configure() }
@@ -54,17 +69,74 @@ struct ImmersiveView: View {
         }
     }
 
+    // MARK: - Frame tick
+
+    private func tick() {
+        guard let field, appModel.mode == .rhythm, conductor.isRunning else { return }
+
+        let songTime = conductor.songTime
+        appModel.songTime = songTime
+
+        for due in scheduler.due(at: songTime) {
+            field.spawn(
+                note: due.note,
+                beatTime: due.beatTime,
+                travelTime: due.travelTime,
+                index: due.index
+            )
+        }
+        field.expireOverdue(songTime: songTime)
+
+        if scheduler.isFinished, field.activeTargets.isEmpty {
+            appModel.isPlaying = false
+        }
+    }
+
+    // MARK: - Transport
+
+    private func startOrStop() {
+        guard let field else { return }
+        if appModel.isPlaying {
+            // Authored chart if one is bundled, generated grid otherwise.
+            let chart = Chart.load(resource: AudioConductor.songResourceName)
+                ?? Chart.generated(
+                    bpm: appModel.bpm,
+                    level: appModel.level,
+                    hand: appModel.trainingHand
+                )
+            appModel.bpm = chart.bpm
+            appModel.chartIsAuthored = Chart.load(resource: AudioConductor.songResourceName) != nil
+            conductor.bpm = chart.bpm
+            scheduler.load(chart)
+            field.reset()
+            conductor.start()
+            appModel.audioIsPlaying = conductor.hasAudio
+        } else {
+            conductor.stop()
+            scheduler.rewind()
+            appModel.audioIsPlaying = false
+        }
+    }
+
     /// Pushes the tuning knobs into the field and lays it out again.
     private func configure(_ target: TargetField? = nil) {
         guard let field = target ?? field else { return }
+        field.mode = appModel.mode
         field.volume = appModel.volume
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount
         field.outlineIsVisible = appModel.showOutline
         field.reset()
-        appModel.hitCount = 0
     }
+
+    private func publishScore(_ field: TargetField) {
+        appModel.hitCount = field.hitCount
+        appModel.missedCount = field.missedCount
+        appModel.judgements = field.judgements
+    }
+
+    // MARK: - Hands
 
     private func onHandUpdate() {
         let palms = handTracking.trackedPalms
@@ -85,7 +157,7 @@ struct ImmersiveView: View {
             ? palms
             : palms.filter { $0.hand == appModel.trainingHand }
 
-        field?.hitTest(palms: scoring)
+        field?.hitTest(palms: scoring, songTime: conductor.songTime)
     }
 }
 

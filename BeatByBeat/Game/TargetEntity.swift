@@ -11,8 +11,12 @@ struct TargetComponent: Component {
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
-    /// Index into the chart. -1 for debug/preview targets.
+    /// Index into the chart. -1 for practice targets with no beat.
     var noteIndex: Int = -1
+    /// Song time this target should be contacted at. Nil in practice mode.
+    var beatTime: TimeInterval?
+    /// How long the player was given to reach it, for scaling the timing window.
+    var travelTime: TimeInterval = 1
 }
 
 enum TargetEntity {
@@ -56,6 +60,41 @@ enum TargetEntity {
         return entity
     }
 
+    /// Scale the approach shell starts at, relative to the target sphere.
+    nonisolated static let approachStartScale: Float = 2.4
+
+    /// Adds a shell that shrinks onto the sphere, reaching it exactly on the
+    /// beat. Contact should happen as the two meet.
+    ///
+    /// Continuous rather than a colour change, because a patient mid-reach
+    /// needs to know whether they are on pace — which a discrete state can't
+    /// tell them. Geometric, so it survives colourblindness with no extra work.
+    ///
+    /// Linear timing on purpose: the shrink rate has to read as a constant
+    /// countdown, and easing would make the remaining time misleading.
+    static func addApproachShell(to target: Entity, travelTime: TimeInterval) {
+        guard let sphere = target.children.first as? ModelEntity,
+              let mesh = sphere.model?.mesh
+        else { return }
+
+        let shell = ModelEntity(mesh: mesh, materials: [shellMaterial()])
+        shell.name = "ApproachShell"
+        shell.scale = .init(repeating: approachStartScale)
+        target.addChild(shell)
+
+        var collapsed = shell.transform
+        collapsed.scale = .one
+        shell.move(to: collapsed, relativeTo: target, duration: travelTime, timingFunction: .linear)
+    }
+
+    /// Freezes the shell where it is — used when contact lands early, so the
+    /// target visibly "locks" instead of continuing to count down.
+    static func lockApproachShell(on target: Entity) {
+        guard let shell = target.findEntity(named: "ApproachShell") else { return }
+        shell.stopAllAnimations()
+        shell.isEnabled = false
+    }
+
     /// Visible marker for the palm proxy. Invaluable while tuning the hit
     /// radius — you can see exactly what the collision is using.
     static func makeHandProxyMarker(radius: Float) -> Entity {
@@ -74,6 +113,21 @@ enum TargetEntity {
         start.scale = .init(repeating: 0.01)
         entity.transform = start
         entity.move(to: final, relativeTo: entity.parent, duration: duration, timingFunction: .easeOut)
+    }
+
+    nonisolated static let missAnimationSeconds: TimeInterval = 0.35
+
+    /// Quiet shrink-away for a target that was never reached. Deliberately
+    /// undramatic — not reaching in time is not a failure worth punctuating.
+    static func playMissAnimation(on entity: Entity) {
+        var faded = entity.transform
+        faded.scale = .init(repeating: 0.01)
+        entity.move(
+            to: faded,
+            relativeTo: entity.parent,
+            duration: missAnimationSeconds,
+            timingFunction: .easeIn
+        )
     }
 
     nonisolated static let hitAnimationSeconds: TimeInterval = 0.18
@@ -99,6 +153,14 @@ enum TargetEntity {
         case .right: UIColor(red: 1.00, green: 0.55, blue: 0.18, alpha: 1)   // amber
         case .both:  UIColor(red: 0.70, green: 0.60, blue: 1.00, alpha: 1)   // violet
         }
+    }
+
+    /// Faint and unlit — the shell marks time, it shouldn't compete with the
+    /// target for attention.
+    private static func shellMaterial() -> RealityKit.Material {
+        var material = UnlitMaterial(color: .white)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.16))
+        return material
     }
 
     private static func material(tint: UIColor, opacity: Float) -> RealityKit.Material {

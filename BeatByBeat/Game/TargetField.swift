@@ -12,11 +12,18 @@ enum TargetLayout: String, CaseIterable, Identifiable {
     var displayName: String { rawValue.capitalized }
 }
 
-/// Keeps a fixed number of targets alive inside the spawn volume, and retires
-/// one when a hand reaches it.
-///
-/// `spawn(at:hand:)` is the single place a target enters the world. When the
-/// chart lands it drives that call instead of `refill()`.
+enum FieldMode: String, CaseIterable, Identifiable {
+    /// A fixed number of targets, replaced as they're reached. No music.
+    /// The simplest possible scene for a first hand-tracking run.
+    case practice
+    /// Targets spawn from the chart and must be reached on the beat.
+    case rhythm
+
+    var id: Self { self }
+    var displayName: String { rawValue.capitalized }
+}
+
+/// Owns the live target entities, in both modes.
 @MainActor
 final class TargetField {
 
@@ -26,17 +33,20 @@ final class TargetField {
     private let minPalmClearance: Float = 0.25
     /// Minimum spacing between two live targets in random layout.
     private let minSeparation: Float = 0.18
-    /// Gap before a replacement appears, so the hit reads as an event.
+    /// Gap before a practice replacement appears, so the hit reads as an event.
     private let respawnDelay: Duration = .milliseconds(250)
 
+    var mode: FieldMode = .practice
     var volume: SpawnVolume = .fixed
     var layout: TargetLayout = .grid
     var hand: TrainingHand = .both
     var targetCount: Int = 3
 
     private(set) var hitCount = 0
-    /// Called on each hit so the UI can update.
-    var onHit: (() -> Void)?
+    private(set) var missedCount = 0
+    private(set) var judgements: [Judgement: Int] = [:]
+    /// Called after any scoring change so the UI can update.
+    var onScoreChange: (() -> Void)?
 
     private let root: Entity
     private let outline: Entity
@@ -52,21 +62,28 @@ final class TargetField {
         root.addChild(outline)
     }
 
-    // MARK: - Spawning
+    // MARK: - Lifecycle
 
-    /// Clears everything and refills to `targetCount`.
+    /// Clears everything. Practice mode refills immediately; rhythm mode waits
+    /// for the chart to drive it.
     func reset() {
         for child in root.children.reversed() where child !== outline {
             child.removeFromParent()
         }
         pendingSpawns = 0
         hitCount = 0
+        missedCount = 0
+        judgements = [:]
         redrawOutline()
-        refill(avoiding: lastPalms)
+        if mode == .practice { refill(avoiding: lastPalms) }
+        onScoreChange?()
     }
+
+    // MARK: - Practice spawning
 
     /// Tops the field back up to `targetCount`.
     func refill(avoiding palms: [SIMD3<Float>]) {
+        guard mode == .practice else { return }
         while activeTargets.count + pendingSpawns < targetCount {
             guard let position = nextPosition(avoiding: palms) else { return }
             spawn(at: position, hand: handForNextTarget())
@@ -78,12 +95,19 @@ final class TargetField {
         at position: SIMD3<Float>,
         hand: TrainingHand,
         radius: Float = TargetEntity.defaultRadius,
-        noteIndex: Int = -1
+        noteIndex: Int = -1,
+        beatTime: TimeInterval? = nil,
+        travelTime: TimeInterval = 1
     ) -> Entity {
         let target = TargetEntity.make(hand: hand, radius: radius, noteIndex: noteIndex)
         target.position = position
+        target.components[TargetComponent.self]?.beatTime = beatTime
+        target.components[TargetComponent.self]?.travelTime = travelTime
         root.addChild(target)
         TargetEntity.playSpawnAnimation(on: target)
+        if beatTime != nil {
+            TargetEntity.addApproachShell(to: target, travelTime: travelTime)
+        }
         return target
     }
 
@@ -124,13 +148,51 @@ final class TargetField {
         }
     }
 
+    // MARK: - Rhythm spawning
+
+    func spawn(note: ChartNote, beatTime: TimeInterval, travelTime: TimeInterval, index: Int) {
+        spawn(
+            at: volume.point(at: note.unit),
+            hand: note.hand,
+            noteIndex: index,
+            beatTime: beatTime,
+            travelTime: travelTime
+        )
+    }
+
+    /// Retires targets whose beat has passed without contact.
+    ///
+    /// Deliberately generous: a target survives a full extra `travelTime` past
+    /// its beat. Nothing vanishes the instant the beat lands, because a target
+    /// disappearing because a patient's arm was slow is exactly the fake
+    /// failure this project is supposed to avoid.
+    func expireOverdue(songTime: TimeInterval) {
+        for target in activeTargets {
+            guard let component = target.components[TargetComponent.self],
+                  let beatTime = component.beatTime,
+                  songTime > beatTime + component.travelTime
+            else { continue }
+
+            target.components.remove(TargetComponent.self)
+            target.components.remove(CollisionComponent.self)
+            missedCount += 1
+            onScoreChange?()
+
+            TargetEntity.playMissAnimation(on: target)
+            Task {
+                try? await Task.sleep(for: .seconds(TargetEntity.missAnimationSeconds))
+                target.removeFromParent()
+            }
+        }
+    }
+
     // MARK: - Hit detection
 
     /// Contact test against every tracked palm. Call this on each hand update.
     ///
     /// A target only answers to the palm matching its own side, so hitting a
     /// left target with the right hand does nothing.
-    func hitTest(palms: [(hand: TrainingHand, proxy: HandProxy)]) {
+    func hitTest(palms: [(hand: TrainingHand, proxy: HandProxy)], songTime: TimeInterval) {
         lastPalms = palms.map(\.proxy.position)
 
         for target in activeTargets {
@@ -141,31 +203,42 @@ final class TargetField {
                         <= palm.proxy.radius + component.radius
             }
             if reach != nil {
-                retire(target)
+                retire(target, component: component, songTime: songTime)
             }
         }
-        refill(avoiding: lastPalms)
+
+        if mode == .practice { refill(avoiding: lastPalms) }
     }
 
-    /// Removes a reached target and queues its replacement.
-    private func retire(_ target: Entity) {
+    /// Removes a reached target, scores it, and queues a replacement in
+    /// practice mode.
+    private func retire(_ target: Entity, component: TargetComponent, songTime: TimeInterval) {
         // Dropping the component immediately makes the target inert, so the
         // frames it spends animating out can't score twice.
         target.components.remove(TargetComponent.self)
         target.components.remove(CollisionComponent.self)
 
         hitCount += 1
-        onHit?()
+        if let beatTime = component.beatTime {
+            let judgement = Judgement.judge(
+                offset: songTime - beatTime,
+                travelTime: component.travelTime
+            )
+            judgements[judgement, default: 0] += 1
+        }
+        onScoreChange?()
 
-        pendingSpawns += 1
+        TargetEntity.lockApproachShell(on: target)
         TargetEntity.playHitAnimation(on: target)
+
+        if mode == .practice { pendingSpawns += 1 }
 
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(TargetEntity.hitAnimationSeconds))
             target.removeFromParent()
 
-            try? await Task.sleep(for: self?.respawnDelay ?? .zero)
-            guard let self else { return }
+            guard let self, self.mode == .practice else { return }
+            try? await Task.sleep(for: self.respawnDelay)
             self.pendingSpawns -= 1
             self.refill(avoiding: self.lastPalms)
         }
