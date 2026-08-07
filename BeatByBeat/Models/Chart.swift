@@ -6,6 +6,13 @@
 import Foundation
 import simd
 
+extension ClosedRange where Bound == Float {
+    var mid: Float { (lowerBound + upperBound) / 2 }
+    func clamping(_ value: Float) -> Float {
+        Swift.min(Swift.max(value, lowerBound), upperBound)
+    }
+}
+
 /// Where the beats actually fall in a song, in seconds.
 ///
 /// Stored as timestamps rather than a tempo, because a tempo plus a grid drifts
@@ -108,25 +115,63 @@ extension Chart {
         let spacing = Int(level.spacingBeats)
 
         var notes: [ChartNote] = []
-        var cursor = SIMD3<Float>(0.5, 0.5, 0.5)
+        // One cursor per arm, so each arm's successive targets relate to each
+        // other. A single shared cursor would make every step a jump across
+        // the body, since consecutive notes alternate sides.
+        var cursors: [TrainingHand: SIMD3<Float>] = [:]
         var index = travelBeats  // leave room for the first note's approach
         var placed = 0
 
         while index < beats.count {
-            cursor = step(from: cursor, maxStep: level.maxStep)
+            let noteHand: TrainingHand = hand == .both
+                ? (placed.isMultiple(of: 2) ? .left : .right)
+                : hand
+            let box = UnitBox(level: level, hand: noteHand)
+            let position = step(
+                from: cursors[noteHand] ?? box.centre,
+                maxStep: level.maxStep,
+                within: box
+            )
+            cursors[noteHand] = position
+
             notes.append(ChartNote(
                 time: beats[index],
                 // Travel spans real beats, so it tracks any tempo drift in the
                 // song instead of assuming a constant period.
                 travel: beats[index] - beats[index - travelBeats],
-                hand: hand == .both ? (placed.isMultiple(of: 2) ? .left : .right) : hand,
-                unit: cursor
+                hand: noteHand,
+                unit: position
             ))
             index += spacing
             placed += 1
         }
 
         return Chart(songId: beatMap.songId, bpm: beatMap.bpm, notes: notes)
+    }
+
+    /// The slice of the unit cube a given hand may use at a given level.
+    private struct UnitBox {
+        var x: ClosedRange<Float>
+        var y: ClosedRange<Float>
+        var z: ClosedRange<Float>
+
+        init(level: ReachLevel, hand: TrainingHand) {
+            x = level.horizontalRange(for: hand)
+            y = level.heightRange
+            z = level.depthRange
+        }
+
+        var centre: SIMD3<Float> {
+            SIMD3(x.mid, y.mid, z.mid)
+        }
+
+        func clamp(_ p: SIMD3<Float>) -> SIMD3<Float> {
+            SIMD3(x.clamping(p.x), y.clamping(p.y), z.clamping(p.z))
+        }
+
+        func randomPoint() -> SIMD3<Float> {
+            SIMD3(.random(in: x), .random(in: y), .random(in: z))
+        }
     }
 
     /// Fallback for when no beat map is bundled: a plain constant-tempo grid.
@@ -146,24 +191,30 @@ extension Chart {
         return build(from: synthetic, level: level, hand: hand)
     }
 
-    /// Random walk through the unit cube, clamped to the box.
+    /// Random walk inside one arm's allowed box.
     ///
-    /// Not fully random: consecutive notes stay within `maxStep` of each other.
-    /// That's the coordination knob — small steps are short adjustments, large
-    /// steps cross the body and demand a planned trajectory. Pure random
+    /// Not fully random: consecutive targets for the same arm stay within
+    /// `maxStep` of each other. That's the coordination knob — small steps are
+    /// short adjustments, large steps demand a planned trajectory. Pure random
     /// placement can't express that at all.
-    private static func step(from current: SIMD3<Float>, maxStep: Float) -> SIMD3<Float> {
-        for _ in 0..<12 {
+    private static func step(
+        from current: SIMD3<Float>,
+        maxStep: Float,
+        within box: UnitBox
+    ) -> SIMD3<Float> {
+        let start = box.clamp(current)
+        for _ in 0..<16 {
             let delta = SIMD3<Float>(
                 .random(in: -maxStep...maxStep),
                 .random(in: -maxStep...maxStep),
                 .random(in: -maxStep...maxStep) * 0.5  // depth varies less
             )
-            let candidate = clamp(current + delta, min: .init(repeating: 0), max: .init(repeating: 1))
+            let candidate = box.clamp(start + delta)
             // Reject a step that barely moves; a target on top of the last one
-            // is not a reach.
-            if distance(candidate, current) > maxStep * 0.4 { return candidate }
+            // is not a reach. The threshold is relative to the box, so a
+            // narrow band at level 1 doesn't reject every candidate.
+            if distance(candidate, start) > maxStep * 0.3 { return candidate }
         }
-        return SIMD3(.random(in: 0...1), .random(in: 0...1), .random(in: 0...1))
+        return box.randomPoint()
     }
 }

@@ -103,6 +103,10 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
 
+        Text(appModel.level.summary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
         if !appModel.isPlaying {
             // Rhythm mode is chart-driven, so nothing but the volume outline
             // exists until the song starts. Saying so stops that reading as a

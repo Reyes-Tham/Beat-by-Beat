@@ -27,7 +27,7 @@ class AppModel {
     // MARK: - Session config
 
     var mode: FieldMode = .practice
-    var level: ReachLevel = .moderate
+    var level: ReachLevel = .three
     var trainingHand: TrainingHand = .both
     var bpm: Double = 120
 

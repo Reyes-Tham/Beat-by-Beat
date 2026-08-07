@@ -5,50 +5,51 @@
 
 import Foundation
 
-/// Difficulty. Scales *speed and coordination*, not how far the player has to
-/// reach — reach distance belongs to the spawn volume (and later, calibration).
+/// Difficulty, as five stars.
 ///
-/// Only the three anchors are implemented. Levels 2 and 4 are interpolation
-/// once these feel right, which is why the raw values are 1/3/5.
+/// The progression opens up the workspace before it adds any time pressure:
+/// height first (1→3), then lateral range (3→4), and only then speed (4→5).
+/// Reach demand and speed demand are kept separate so a patient is never asked
+/// to move faster and further at the same time.
 enum ReachLevel: Int, CaseIterable, Identifiable, Codable {
-    case minimal = 1
-    case moderate = 3
-    case challenge = 5
+    case one = 1
+    case two
+    case three
+    case four
+    case five
 
     var id: Int { rawValue }
 
-    var displayName: String {
+    var displayName: String { "\(rawValue)★" }
+
+    /// What actually changes at this level.
+    var summary: String {
         switch self {
-        case .minimal: "Minimal"
-        case .moderate: "Moderate"
-        case .challenge: "Challenge"
+        case .one:   "Own side, low — no crossing the middle"
+        case .two:   "Own side, up to mid height"
+        case .three: "Own side, full height"
+        case .four:  "Own side plus centre — longer reaches"
+        case .five:  "Own side plus centre, faster reaches"
         }
     }
+
+    // MARK: - Pacing
 
     /// Time the player gets to travel to a target, in beats.
     ///
     /// Whole musical units on purpose: a reach that takes exactly two bars
     /// lands its contact on a downbeat, so the movement *is* the phrase.
+    /// Only level 5 shortens it — 1 through 4 differ in space, not time.
     var travelBeats: Double {
-        switch self {
-        case .minimal: 8      // 2 bars
-        case .moderate: 4     // 1 bar
-        case .challenge: 2    // half a bar
-        }
+        self == .five ? 4 : 8
     }
 
     /// Quiet beats after a target's beat before the next one appears.
     ///
-    /// Without this the next target spawns the instant the last is contacted,
-    /// so the arms never stop moving. At Minimal the rest is what turns the
-    /// chart into clear turn-taking: reach, return, then the other arm goes.
-    var restBeats: Double {
-        switch self {
-        case .minimal: 4      // ~1.7s of stillness between reaches
-        case .moderate: 2
-        case .challenge: 0    // continuous
-        }
-    }
+    /// Never zero at any level. Without a rest the next target spawns the
+    /// instant the last is contacted and the arms never stop moving; the rest
+    /// is what makes this turn-taking rather than continuous work.
+    var restBeats: Double { 4 }
 
     /// Beats between consecutive notes.
     ///
@@ -57,17 +58,51 @@ enum ReachLevel: Int, CaseIterable, Identifiable, Codable {
     var spacingBeats: Double { travelBeats + restBeats }
 
     /// Beats between two notes for the *same* arm, when hands alternate.
-    /// This is the number that decides whether Minimal feels restful.
+    /// This is the number that decides whether a level feels restful.
     var perArmBeats: Double { spacingBeats * 2 }
 
-    /// Largest jump between consecutive notes, in unit-cube space.
-    /// This is the coordination axis: small = local adjustments, large =
-    /// crossing the midline and planning a trajectory.
+    // MARK: - Workspace
+
+    /// Vertical band of the spawn volume this level uses, 0 = bottom.
+    /// Lower levels stay low so the patient isn't reaching overhead.
+    var heightRange: ClosedRange<Float> {
+        switch self {
+        case .one:   0.00...0.32
+        case .two:   0.00...0.58
+        case .three, .four, .five: 0.00...1.00
+        }
+    }
+
+    /// Whether a hand may use the middle of the volume.
+    var allowsCentre: Bool { self == .four || self == .five }
+
+    /// Horizontal band a given hand may spawn in, 0 = player's left.
+    ///
+    /// Levels 1–3 keep each arm on its own side with a gap through the middle,
+    /// so neither arm is asked to cross the body. Levels 4–5 open the centre,
+    /// which lengthens the reaches available to both.
+    func horizontalRange(for hand: TrainingHand) -> ClosedRange<Float> {
+        switch hand {
+        case .left:  allowsCentre ? 0.00...0.62 : 0.00...0.42
+        case .right: allowsCentre ? 0.38...1.00 : 0.58...1.00
+        case .both:  0.00...1.00
+        }
+    }
+
+    /// Depth band. Trimmed away from the volume's front and back faces so
+    /// targets don't sit on the very edge of the reachable box.
+    var depthRange: ClosedRange<Float> { 0.20...0.80 }
+
+    /// Largest jump between consecutive targets *for the same arm*, in unit
+    /// space. The coordination axis: small = local adjustments, large = a
+    /// planned trajectory across the workspace.
     var maxStep: Float {
         switch self {
-        case .minimal: 0.35
-        case .moderate: 0.55
-        case .challenge: 0.90
+        case .one: 0.30
+        case .two: 0.40
+        case .three: 0.50
+        case .four: 0.65
+        case .five: 0.80
         }
     }
 }
