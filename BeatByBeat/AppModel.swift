@@ -51,6 +51,21 @@ class AppModel {
     var showOutline = true
     var showHandProxy = true
 
+    /// Drives a fake palm from mouse drags so the hit loop can be exercised
+    /// without a headset. The Simulator reports no hand anchors at all, so
+    /// there is otherwise no way to test contact there.
+    var simulateHandWithMouse = false
+
+    /// Gates the simulator-only affordances, so the toggle can't be left on
+    /// during a device demo.
+    static let isSimulator: Bool = {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }()
+
     /// Height of the volume centre above the floor.
     var centerHeight: Float = SpawnVolume.fixed.center.y
     /// Distance of the volume centre in front of the player.

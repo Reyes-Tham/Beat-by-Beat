@@ -140,6 +140,15 @@ struct ContentView: View {
 
         Toggle("Show volume outline", isOn: $appModel.showOutline)
         Toggle("Show hand proxy", isOn: $appModel.showHandProxy)
+
+        if AppModel.isSimulator {
+            Toggle("Simulate hand with mouse", isOn: $appModel.simulateHandWithMouse)
+            if appModel.simulateHandWithMouse {
+                Text("Click and drag in the immersive space to move the palm.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Readouts

@@ -16,6 +16,14 @@ struct HandProxy {
     /// dial for how easy a target is to reach. Tune on device.
     static let defaultRadius: Float = 0.055
 
+    /// Radius for the mouse-driven stand-in used in the Simulator.
+    ///
+    /// Larger than the real thing on purpose: the fake palm slides on a flat
+    /// plane at the volume's mid-depth, so without extra reach it could only
+    /// touch targets sitting exactly on that plane. This is for proving the
+    /// loop is wired up, not for judging how forgiving contact feels.
+    static let simulatedRadius: Float = 0.12
+
     var position: SIMD3<Float>
     var radius: Float = HandProxy.defaultRadius
     var updatedAt: TimeInterval
