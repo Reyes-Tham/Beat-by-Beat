@@ -130,6 +130,9 @@ struct ImmersiveView: View {
         } else {
             conductor.stop()
             scheduler.rewind()
+            // Without this, stopping mid-song left every in-flight target
+            // hanging in the scene with no clock to expire it.
+            field.clearTargets()
             appModel.audioIsPlaying = false
         }
     }

@@ -64,13 +64,19 @@ final class TargetField {
 
     // MARK: - Lifecycle
 
+    /// Destroys every live target. Used by reset, and when a song stops so
+    /// nothing is left floating in the scene.
+    func clearTargets() {
+        for child in root.children.reversed() where child !== outline {
+            TargetEntity.destroy(child)
+        }
+        pendingSpawns = 0
+    }
+
     /// Clears everything. Practice mode refills immediately; rhythm mode waits
     /// for the chart to drive it.
     func reset() {
-        for child in root.children.reversed() where child !== outline {
-            child.removeFromParent()
-        }
-        pendingSpawns = 0
+        clearTargets()
         hitCount = 0
         missedCount = 0
         judgements = [:]
@@ -180,11 +186,11 @@ final class TargetField {
 
             // Stop the countdown too, or the shell keeps shrinking on a target
             // that is already on its way out.
-            TargetEntity.lockApproachShell(on: target)
+            TargetEntity.removeApproachShell(from: target)
             TargetEntity.playMissAnimation(on: target)
             Task {
                 try? await Task.sleep(for: .seconds(TargetEntity.missAnimationSeconds))
-                target.removeFromParent()
+                TargetEntity.destroy(target)
             }
         }
     }
@@ -231,7 +237,7 @@ final class TargetField {
         }
         onScoreChange?()
 
-        TargetEntity.lockApproachShell(on: target)
+        TargetEntity.removeApproachShell(from: target)
         TargetEntity.playHitAnimation(on: target)
 
         let wasPractice = mode == .practice
@@ -239,7 +245,7 @@ final class TargetField {
 
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(TargetEntity.hitAnimationSeconds))
-            target.removeFromParent()
+            TargetEntity.destroy(target)
 
             guard let self, wasPractice else { return }
             try? await Task.sleep(for: self.respawnDelay)
@@ -254,7 +260,7 @@ final class TargetField {
     // MARK: - Debug outline
 
     func redrawOutline() {
-        outline.children.forEach { $0.removeFromParent() }
+        outline.children.reversed().forEach { TargetEntity.destroy($0) }
         for corner in volume.corners {
             let dot = TargetEntity.makeDebugDot()
             dot.position = corner

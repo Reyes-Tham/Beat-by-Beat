@@ -33,10 +33,14 @@ enum TargetEntity {
         let root = Entity()
         root.name = "Target[\(hand.rawValue)#\(noteIndex)]"
 
+        // Opaque, deliberately. A translucent target does not write depth, so
+        // it sorts per-entity against the window panel and against its own
+        // approach shell — which showed up as the panel ghosting through it.
         let sphere = ModelEntity(
             mesh: .generateSphere(radius: radius),
-            materials: [material(tint: tint(for: hand), opacity: 0.85)]
+            materials: [material(tint: tint(for: hand), opacity: 1.0)]
         )
+        sphere.name = "Core"
         root.addChild(sphere)
 
         // Present from the start so palm-proxy contact is a plain
@@ -51,10 +55,12 @@ enum TargetEntity {
     }
 
     /// Dim marker used to outline the spawn volume during development.
+    /// Opaque despite being a debug aid — it is tiny, and keeping it out of the
+    /// transparent pass means it can't sort oddly against targets.
     static func makeDebugDot(radius: Float = 0.012) -> Entity {
         let entity = ModelEntity(
             mesh: .generateSphere(radius: radius),
-            materials: [material(tint: .white, opacity: 0.45)]
+            materials: [material(tint: .init(white: 0.75, alpha: 1), opacity: 1.0)]
         )
         entity.name = "DebugDot"
         return entity
@@ -62,6 +68,11 @@ enum TargetEntity {
 
     /// Scale the approach shell starts at, relative to the target sphere.
     nonisolated static let approachStartScale: Float = 2.4
+
+    /// Scale the shell stops at. Never 1.0: two identical sphere meshes at the
+    /// same scale are coplanar and z-fight, which is what put a hard seam
+    /// across the target's equator.
+    nonisolated static let approachEndScale: Float = 1.12
 
     /// Adds a shell that shrinks onto the sphere, reaching it exactly on the
     /// beat. Contact should happen as the two meet.
@@ -86,24 +97,49 @@ enum TargetEntity {
         target.addChild(shell)
 
         var collapsed = shell.transform
-        collapsed.scale = .one
+        collapsed.scale = .init(repeating: approachEndScale)
         shell.move(to: collapsed, relativeTo: target, duration: travelTime, timingFunction: .linear)
+
+        // Once it has arrived it has said everything it can, and leaving a
+        // transparent shell wrapped around the target only adds sorting work.
+        Task {
+            try? await Task.sleep(for: .seconds(travelTime))
+            removeApproachShell(from: target)
+        }
     }
 
-    /// Freezes the shell where it is — used when contact lands early, so the
-    /// target visibly "locks" instead of continuing to count down.
-    static func lockApproachShell(on target: Entity) {
+    /// Removes the shell outright — used when contact lands, when the note
+    /// expires, and when the countdown finishes.
+    static func removeApproachShell(from target: Entity) {
         guard let shell = target.findEntity(named: "ApproachShell") else { return }
         shell.stopAllAnimations()
-        shell.isEnabled = false
+        shell.removeFromParent()
+    }
+
+    /// Tears an entity down completely.
+    ///
+    /// `removeFromParent()` alone leaves running animations and child entities
+    /// holding the subtree alive, so a target that looked gone could still be
+    /// animating and still be referenced. Stopping animations first, then
+    /// dismantling children, makes the removal final.
+    static func destroy(_ entity: Entity) {
+        entity.stopAllAnimations(recursive: true)
+        for child in entity.children.reversed() {
+            destroy(child)
+        }
+        entity.components.removeAll()
+        entity.removeFromParent()
     }
 
     /// Visible marker for the palm proxy. Invaluable while tuning the hit
     /// radius — you can see exactly what the collision is using.
     static func makeHandProxyMarker(radius: Float) -> Entity {
+        // Faint: it sits between the player and everything else, and at the
+        // Simulator stand-in's larger radius a solid sphere this size blots
+        // out the targets it is meant to be reaching.
         let entity = ModelEntity(
             mesh: .generateSphere(radius: radius),
-            materials: [material(tint: .white, opacity: 0.25)]
+            materials: [material(tint: .white, opacity: 0.12)]
         )
         entity.name = "HandProxy"
         return entity
@@ -175,7 +211,11 @@ enum TargetEntity {
         material.emissiveIntensity = 0.65
         material.roughness = 0.3
         material.metallic = 0.0
-        material.blending = .transparent(opacity: .init(floatLiteral: opacity))
+        // Only opt into the transparent pass when it's actually needed —
+        // anything transparent skips depth writes and has to be sorted.
+        if opacity < 1 {
+            material.blending = .transparent(opacity: .init(floatLiteral: opacity))
+        }
         return material
     }
 }
