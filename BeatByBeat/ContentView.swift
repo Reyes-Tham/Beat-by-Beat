@@ -11,68 +11,107 @@ struct ContentView: View {
     var body: some View {
         @Bindable var appModel = appModel
 
-        VStack(alignment: .leading, spacing: 16) {
+        // Header and actions are pinned; only the settings scroll. The action
+        // row is how you open the immersive space, so it must never be the
+        // thing that gets pushed off the bottom.
+        VStack(spacing: 0) {
             header
+                .padding(.horizontal, 32)
+                .padding(.top, 28)
+                .padding(.bottom, 16)
 
-            Label(trackingLabel, systemImage: trackingSymbol)
-                .font(.callout)
-                .foregroundStyle(trackingIsHealthy ? Color.secondary : Color.orange)
+            Divider()
 
-            Picker("Mode", selection: $appModel.mode) {
-                ForEach(FieldMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Picker("Mode", selection: $appModel.mode) {
+                        ForEach(FieldMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("Hand", selection: $appModel.trainingHand) {
+                        ForEach(TrainingHand.allCases, id: \.self) { hand in
+                            Text(hand.displayName).tag(hand)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if appModel.mode == .rhythm {
+                        rhythmControls
+                    } else {
+                        practiceControls
+                    }
+
+                    Divider()
+                    volumeControls
                 }
-            }
-            .pickerStyle(.segmented)
-
-            Picker("Hand", selection: $appModel.trainingHand) {
-                ForEach(TrainingHand.allCases, id: \.self) { hand in
-                    Text(hand.displayName).tag(hand)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if appModel.mode == .rhythm {
-                rhythmControls
-            } else {
-                practiceControls
+                .padding(.horizontal, 32)
+                .padding(.vertical, 20)
             }
 
             Divider()
-            volumeControls
 
-            HStack {
-                ToggleImmersiveSpaceButton()
-                Button(appModel.mode == .rhythm ? "Respawn" : "Respawn") {
-                    appModel.requestRespawn()
-                }
-                .disabled(appModel.immersiveSpaceState != .open)
-            }
+            actionBar
+                .padding(.horizontal, 32)
+                .padding(.vertical, 18)
         }
-        .padding(36)
-        .frame(width: 500)
+        .frame(width: 520)
     }
 
-    // MARK: - Sections
+    // MARK: - Pinned sections
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Beat By Beat")
-                .font(.extraLargeTitle2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Beat By Beat")
+                    .font(.title)
+                Label(trackingLabel, systemImage: trackingSymbol)
+                    .font(.caption)
+                    .foregroundStyle(trackingIsHealthy ? Color.secondary : Color.orange)
+            }
             Spacer()
             VStack(alignment: .trailing, spacing: 0) {
                 Text("Reached: \(appModel.hitCount)")
+                    .font(.title3)
                     .monospacedDigit()
                 if appModel.mode == .rhythm {
                     Text("Not reached: \(appModel.missedCount)")
-                        .font(.callout)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
             }
-            .font(.title2)
         }
     }
+
+    private var actionBar: some View {
+        HStack(spacing: 12) {
+            ToggleImmersiveSpaceButton()
+
+            if appModel.mode == .rhythm {
+                Button(appModel.isPlaying ? "Stop" : "Play") {
+                    appModel.isPlaying.toggle()
+                }
+                .disabled(appModel.immersiveSpaceState != .open)
+            }
+
+            Button("Respawn") { appModel.requestRespawn() }
+                .disabled(appModel.immersiveSpaceState != .open)
+
+            Spacer()
+
+            if appModel.mode == .rhythm, appModel.isPlaying {
+                Text(String(format: "%.1fs", appModel.songTime))
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Scrolling sections
 
     @ViewBuilder
     private var rhythmControls: some View {
@@ -86,39 +125,13 @@ struct ContentView: View {
         .pickerStyle(.segmented)
         .disabled(appModel.isPlaying)
 
-        HStack {
-            Button(appModel.isPlaying ? "Stop" : "Play") {
-                appModel.isPlaying.toggle()
-            }
-            .disabled(appModel.immersiveSpaceState != .open)
-
-            Text(String(format: "%.1fs", appModel.songTime))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text(sourceLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-
-        Text(appModel.level.summary)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-        if !appModel.isPlaying {
-            // Rhythm mode is chart-driven, so nothing but the volume outline
-            // exists until the song starts. Saying so stops that reading as a
-            // failure to spawn.
-            Text("Press Play — targets are spawned by the song, not on standby.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(appModel.level.summary)
             Text(pacingLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(sourceLabel)
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
 
         if appModel.judgements.values.reduce(0, +) > 0 {
             HStack(spacing: 16) {
@@ -207,7 +220,7 @@ struct ContentView: View {
                 }
             )
         }
-        .frame(height: 150)
+        .frame(height: 140)
     }
 
     // MARK: - Readouts
@@ -218,16 +231,21 @@ struct ContentView: View {
         let beat = 60.0 / max(appModel.bpm, 1)
         let travel = appModel.level.travelBeats * beat
         let perArm = appModel.level.perArmBeats * beat
-        return String(
-            format: "%.1fs to reach · same arm every %.1fs · %d notes",
-            travel, perArm, appModel.noteCount
-        )
+        return String(format: "%.1fs to reach · same arm every %.1fs", travel, perArm)
     }
 
+    /// Before Play, reports what's *bundled*; during playback, what's actually
+    /// driving. Previously it always read "generated · silent" while stopped,
+    /// which looked like the song had failed to load.
     private var sourceLabel: String {
-        let chart = appModel.chartIsAuthored ? "authored chart" : "generated chart"
+        guard appModel.isPlaying else {
+            let song = AppModel.hasBundledSong ? "song ready" : "no song bundled"
+            let grid = AppModel.hasBundledBeatMap ? "beat grid ready" : "no beat grid"
+            return "\(song) · \(grid) — press Play"
+        }
+        let chart = appModel.chartIsAuthored ? "song beat grid" : "generated grid"
         let audio = appModel.audioIsPlaying ? "audio clock" : "silent clock"
-        return "\(chart) · \(audio)"
+        return "\(chart) · \(audio) · \(appModel.noteCount) notes"
     }
 
     private var trackingIsHealthy: Bool {

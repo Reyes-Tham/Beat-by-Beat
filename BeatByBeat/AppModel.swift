@@ -75,6 +75,14 @@ class AppModel {
         #endif
     }()
 
+    /// Checked once so the panel can report what's bundled before playback,
+    /// rather than showing the post-play flags while still stopped.
+    static let hasBundledSong: Bool = ["m4a", "mp3", "wav", "aiff", "caf"].contains {
+        Bundle.main.url(forResource: AudioConductor.songResourceName, withExtension: $0) != nil
+    }
+    static let hasBundledBeatMap: Bool =
+        Bundle.main.url(forResource: AudioConductor.beatMapResourceName, withExtension: "json") != nil
+
     /// Height of the volume centre above the floor.
     var centerHeight: Float = SpawnVolume.fixed.center.y
     /// Distance of the volume centre in front of the player.
