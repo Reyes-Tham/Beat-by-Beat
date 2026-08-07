@@ -51,10 +51,17 @@ class AppModel {
     var showOutline = true
     var showHandProxy = true
 
-    /// Drives a fake palm from mouse drags so the hit loop can be exercised
+    /// Drives a fake palm from a drag pad so the hit loop can be exercised
     /// without a headset. The Simulator reports no hand anchors at all, so
     /// there is otherwise no way to test contact there.
+    ///
+    /// The pad lives in the window rather than the immersive space on purpose:
+    /// anything with an `InputTargetComponent` sitting between the player and
+    /// the window swallows every pinch aimed at the UI.
     var simulateHandWithMouse = false
+
+    /// Fake palm position in unit-cube space, or nil before the first drag.
+    var simulatedPalmUnit: SIMD3<Float>?
 
     /// Gates the simulator-only affordances, so the toggle can't be left on
     /// during a device demo.

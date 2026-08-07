@@ -144,11 +144,53 @@ struct ContentView: View {
         if AppModel.isSimulator {
             Toggle("Simulate hand with mouse", isOn: $appModel.simulateHandWithMouse)
             if appModel.simulateHandWithMouse {
-                Text("Click and drag in the immersive space to move the palm.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                handPad
             }
         }
+    }
+
+    /// Trackpad for the fake palm: drag anywhere inside to move it through the
+    /// spawn volume. Lives here rather than in the immersive space because an
+    /// input-targetable entity floating in front of the player intercepts every
+    /// pinch meant for this window.
+    private var handPad: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.tertiary)
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.quaternary, lineWidth: 1)
+
+                if let unit = appModel.simulatedPalmUnit {
+                    Circle()
+                        .fill(.white.opacity(0.8))
+                        .frame(width: 22, height: 22)
+                        .offset(
+                            x: CGFloat(unit.x) * geometry.size.width - 11,
+                            // Screen y grows downward, volume y grows up.
+                            y: CGFloat(1 - unit.y) * geometry.size.height - 11
+                        )
+                } else {
+                    Text("Drag here to move the hand")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0).onChanged { value in
+                    let x = Float(value.location.x / geometry.size.width)
+                    let y = Float(1 - value.location.y / geometry.size.height)
+                    appModel.simulatedPalmUnit = SIMD3(
+                        min(max(x, 0), 1),
+                        min(max(y, 0), 1),
+                        0.5  // mid-depth; the stand-in's larger radius covers the rest
+                    )
+                }
+            )
+        }
+        .frame(height: 150)
     }
 
     // MARK: - Readouts
