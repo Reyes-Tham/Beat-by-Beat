@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var showSettings = false
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -24,28 +25,39 @@ struct ContentView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Picker("Mode", selection: $appModel.mode) {
-                        ForEach(FieldMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("Hand", selection: $appModel.trainingHand) {
-                        ForEach(TrainingHand.allCases, id: \.self) { hand in
-                            Text(hand.displayName).tag(hand)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if appModel.mode == .rhythm {
-                        rhythmControls
+                    if appModel.isCalibrating {
+                        calibrationFlow
                     } else {
-                        practiceControls
+                        Picker("Mode", selection: $appModel.mode) {
+                            ForEach(FieldMode.allCases) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Picker("Hand", selection: $appModel.trainingHand) {
+                            ForEach(TrainingHand.allCases, id: \.self) { hand in
+                                Text(hand.displayName).tag(hand)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        if appModel.mode == .rhythm {
+                            rhythmControls
+                        } else {
+                            practiceControls
+                        }
+
+                        Divider()
+                        workspaceSummary
                     }
 
-                    Divider()
-                    volumeControls
+                    // Kept in the main panel rather than behind the gear: it's
+                    // needed while calibrating and while playing, so burying it
+                    // in a sheet would mean closing the thing you're driving.
+                    if AppModel.isSimulator, appModel.simulateHandWithMouse {
+                        handPad
+                    }
                 }
                 .padding(.horizontal, 32)
                 .padding(.vertical, 20)
@@ -58,6 +70,75 @@ struct ContentView: View {
                 .padding(.vertical, 18)
         }
         .frame(width: 520)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(appModel)
+        }
+    }
+
+    // MARK: - Calibration
+
+    @ViewBuilder
+    private var calibrationFlow: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Calibrating — \(appModel.calibrationProgress)")
+                .font(.title3)
+
+            Text(appModel.calibrationStepName)
+                .font(.headline)
+
+            Text(appModel.calibrationInstruction)
+                .foregroundStyle(.secondary)
+
+            if appModel.calibrationAwaitingHand {
+                Label("Looking for your hand — move it into view.",
+                      systemImage: "hand.raised")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+            }
+
+            Text("Go only as far as is comfortable. Touching the sphere is not "
+                 + "required — press Far enough when you've stopped.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceSummary: some View {
+        @Bindable var appModel = appModel
+
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Workspace")
+                    .font(.headline)
+                Spacer()
+                if appModel.calibration != nil {
+                    Toggle("Use calibration", isOn: $appModel.useCalibration)
+                        .labelsHidden()
+                }
+            }
+
+            if let profile = appModel.calibration, appModel.useCalibration {
+                Text("Calibrated · \(profile.summary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if profile.wasTrackingLimited {
+                    Text("Tracking-limited: \(profile.trackingLimitedSteps.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Text("Suggested start: \(profile.suggestedLevel.displayName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                let size = appModel.manualVolume.size
+                Text(String(format: "Manual · %.0f×%.0f×%.0f cm — set in settings",
+                            size.x * 100, size.y * 100, size.z * 100))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Pinned sections
@@ -83,30 +164,50 @@ struct ContentView: View {
                         .monospacedDigit()
                 }
             }
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help("Settings")
         }
     }
 
+    @ViewBuilder
     private var actionBar: some View {
-        HStack(spacing: 12) {
-            ToggleImmersiveSpaceButton()
-
-            if appModel.mode == .rhythm {
-                Button(appModel.isPlaying ? "Stop" : "Play") {
-                    appModel.isPlaying.toggle()
-                }
-                .disabled(appModel.immersiveSpaceState != .open)
+        if appModel.isCalibrating {
+            HStack(spacing: 12) {
+                Button("Far enough") { appModel.advanceCalibration() }
+                    .buttonStyle(.borderedProminent)
+                Button("Cancel") { appModel.cancelCalibration() }
+                Spacer()
             }
+        } else {
+            HStack(spacing: 12) {
+                ToggleImmersiveSpaceButton()
 
-            Button("Respawn") { appModel.requestRespawn() }
-                .disabled(appModel.immersiveSpaceState != .open)
+                Button("Calibrate") { appModel.startCalibration() }
+                    .disabled(appModel.immersiveSpaceState != .open)
 
-            Spacer()
+                if appModel.mode == .rhythm {
+                    Button(appModel.isPlaying ? "Stop" : "Play") {
+                        appModel.isPlaying.toggle()
+                    }
+                    .disabled(appModel.immersiveSpaceState != .open)
+                }
 
-            if appModel.mode == .rhythm, appModel.isPlaying {
-                Text(String(format: "%.1fs", appModel.songTime))
-                    .font(.callout)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                Button("Respawn") { appModel.requestRespawn() }
+                    .disabled(appModel.immersiveSpaceState != .open)
+
+                Spacer()
+
+                if appModel.mode == .rhythm, appModel.isPlaying {
+                    Text(String(format: "%.1fs", appModel.songTime))
+                        .font(.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -158,25 +259,6 @@ struct ContentView: View {
 
         Stepper("Live targets: \(appModel.targetCount)",
                 value: $appModel.targetCount, in: 1...12)
-    }
-
-    @ViewBuilder
-    private var volumeControls: some View {
-        @Bindable var appModel = appModel
-
-        slider("Height", value: $appModel.centerHeight, range: 0.70...1.70, unit: "cm")
-        slider("Distance", value: $appModel.centerDistance, range: 0.25...1.00, unit: "cm")
-        slider("Spread", value: $appModel.spread, range: 0.4...2.0, unit: "×")
-
-        Toggle("Show volume outline", isOn: $appModel.showOutline)
-        Toggle("Show hand proxy", isOn: $appModel.showHandProxy)
-
-        if AppModel.isSimulator {
-            Toggle("Simulate hand with mouse", isOn: $appModel.simulateHandWithMouse)
-            if appModel.simulateHandWithMouse {
-                handPad
-            }
-        }
     }
 
     /// Trackpad for the fake palm: drag anywhere inside to move it through the

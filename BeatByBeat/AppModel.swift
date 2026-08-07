@@ -14,6 +14,7 @@ class AppModel {
         // Registered here rather than in the App: importing RealityKit into a
         // file that declares `body: some Scene` makes `Scene` ambiguous.
         TargetComponent.registerComponent()
+        calibration = CalibrationProfile.loadSaved()
     }
 
     let immersiveSpaceID = "ImmersiveSpace"
@@ -90,12 +91,30 @@ class AppModel {
     /// Scales width and height together; depth stays fixed.
     var spread: Float = 1.0
 
-    var volume: SpawnVolume {
+    /// Volume set by hand. Stays available as the therapist override, and as
+    /// the fallback if a capture fails during a demo — a live demo should
+    /// never have calibration as a single point of failure.
+    var manualVolume: SpawnVolume {
         let base = SpawnVolume.fixed
         return SpawnVolume(
             center: [0, centerHeight, -centerDistance],
             size: [base.size.x * spread, base.size.y * spread, base.size.z]
         )
+    }
+
+    /// Calibration result, when there is one.
+    var calibration: CalibrationProfile? {
+        didSet { calibration?.save() }
+    }
+    /// Lets the therapist fall back to the sliders without discarding a
+    /// capture.
+    var useCalibration = true
+
+    var isUsingCalibration: Bool { useCalibration && calibration != nil }
+
+    /// What gameplay actually uses.
+    var volume: SpawnVolume {
+        isUsingCalibration ? calibration!.volume : manualVolume
     }
 
     // MARK: - Live readouts
@@ -111,5 +130,29 @@ class AppModel {
 
     func requestRespawn() {
         respawnRequests += 1
+    }
+
+    // MARK: - Calibration flow
+    //
+    // Mirrors of CalibrationManager state, which lives with the RealityView.
+    // The panel reads these; it never touches the manager directly.
+
+    var isCalibrating = false
+    var calibrationStepName = ""
+    var calibrationInstruction = ""
+    var calibrationProgress = ""
+    var calibrationAwaitingHand = false
+    private(set) var calibrationRequests = 0
+    private(set) var calibrationCancelRequests = 0
+    private(set) var calibrationAdvanceRequests = 0
+
+    func startCalibration() { calibrationRequests += 1 }
+    func cancelCalibration() { calibrationCancelRequests += 1 }
+    /// "Far enough" — accepts wherever the hand got to for this step.
+    func advanceCalibration() { calibrationAdvanceRequests += 1 }
+
+    func clearCalibration() {
+        calibration = nil
+        CalibrationProfile.clearSaved()
     }
 }

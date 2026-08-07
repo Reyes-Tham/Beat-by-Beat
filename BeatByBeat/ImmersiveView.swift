@@ -12,8 +12,13 @@ struct ImmersiveView: View {
     @State private var handTracking = HandTrackingManager()
     @State private var conductor = AudioConductor()
     @State private var scheduler = BeatScheduler()
+    @State private var calibration = CalibrationManager()
     @State private var field: TargetField?
     @State private var proxyMarkers: [TrainingHand: Entity] = [:]
+    @State private var probeRoot = Entity()
+
+    /// Probe is oversized: it's a place to aim at, not something to hit.
+    private let probeRadius: Float = 0.10
 
     var body: some View {
         RealityView { content in
@@ -28,6 +33,9 @@ struct ImmersiveView: View {
             let field = TargetField(root: root)
             field.onScoreChange = { publishScore(field) }
             self.field = field
+
+            probeRoot.name = "CalibrationProbe"
+            content.add(probeRoot)
 
             configure(field)
 
@@ -55,6 +63,10 @@ struct ImmersiveView: View {
             conductor.stop()
         }
         .onChange(of: appModel.isPlaying) { startOrStop() }
+        .onChange(of: appModel.calibrationRequests) { beginCalibration() }
+        .onChange(of: appModel.calibrationCancelRequests) { cancelCalibration() }
+        .onChange(of: appModel.calibrationAdvanceRequests) { acceptCalibrationStep() }
+        .onChange(of: appModel.useCalibration) { configure() }
         .onChange(of: appModel.simulateHandWithMouse) {
             appModel.simulatedPalmUnit = nil
             updateProxyMarkers()
@@ -83,6 +95,11 @@ struct ImmersiveView: View {
     private func tick() {
         guard let field else { return }
 
+        if calibration.phase == .capturing {
+            tickCalibration()
+            return
+        }
+
         if appModel.mode == .rhythm, conductor.isRunning {
             let songTime = conductor.songTime
             appModel.songTime = songTime
@@ -103,6 +120,93 @@ struct ImmersiveView: View {
         if appModel.simulateHandWithMouse, appModel.simulatedPalmUnit != nil {
             runHitTest()
         }
+    }
+
+    // MARK: - Calibration
+
+    private func beginCalibration() {
+        guard let field else { return }
+        appModel.isPlaying = false
+        field.clearTargets()
+        field.outlineIsVisible = false
+        // Probes are placed relative to whatever box is in use, so the sliders
+        // give the capture a sane starting scale.
+        calibration.begin(base: appModel.volume, hand: appModel.trainingHand)
+        publishCalibrationState()
+        showProbe()
+    }
+
+    private func cancelCalibration() {
+        calibration.cancel()
+        clearProbe()
+        publishCalibrationState()
+        configure()
+    }
+
+    private func tickCalibration() {
+        // The training hand is the one being measured. With Both, whichever is
+        // visible drives it.
+        let palm = handTracking.proxy(for: appModel.trainingHand)?.position
+            ?? (appModel.simulateHandWithMouse
+                ? appModel.simulatedPalmUnit.map { calibration.probeBox.point(at: $0) }
+                : nil)
+
+        calibration.record(palm: palm)
+        updateProxyMarkers()
+
+        // Contact ends a step early, but nothing depends on it — the useful
+        // measurement is where the hand stopped, not whether it arrived.
+        if let palm,
+           calibration.hasReachedProbe(
+                palm: palm,
+                palmRadius: activePalmRadius,
+                probeRadius: probeRadius
+           ) {
+            acceptCalibrationStep()
+            return
+        }
+
+        publishCalibrationState()
+    }
+
+    private func acceptCalibrationStep() {
+        calibration.advance()
+        publishCalibrationState()
+
+        if calibration.phase == .finished, let profile = calibration.profile {
+            appModel.calibration = profile
+            appModel.useCalibration = true
+            clearProbe()
+            configure()
+        } else {
+            showProbe()
+        }
+    }
+
+    private func showProbe() {
+        clearProbe()
+        guard let position = calibration.probePosition else { return }
+        let probe = TargetEntity.make(
+            hand: appModel.trainingHand,
+            radius: probeRadius
+        )
+        probe.position = position
+        probeRoot.addChild(probe)
+        TargetEntity.playSpawnAnimation(on: probe)
+    }
+
+    private func clearProbe() {
+        for child in probeRoot.children.reversed() {
+            TargetEntity.destroy(child)
+        }
+    }
+
+    private func publishCalibrationState() {
+        appModel.isCalibrating = calibration.phase == .capturing
+        appModel.calibrationStepName = calibration.currentStep?.name ?? ""
+        appModel.calibrationInstruction = calibration.currentStep?.instruction ?? ""
+        appModel.calibrationProgress = calibration.progress
+        appModel.calibrationAwaitingHand = calibration.awaitingHand
     }
 
     // MARK: - Transport
@@ -168,11 +272,18 @@ struct ImmersiveView: View {
 
     // MARK: - Hands
 
+    private var activePalmRadius: Float {
+        appModel.simulateHandWithMouse ? HandProxy.simulatedRadius : HandProxy.defaultRadius
+    }
+
     /// Palms currently driving the game — real ones, or the mouse stand-in.
     private var activePalms: [(hand: TrainingHand, proxy: HandProxy)] {
         if appModel.simulateHandWithMouse, let unit = appModel.simulatedPalmUnit {
+            // During a capture the pad spans the probe box, which is larger
+            // than the gameplay volume — otherwise the corners are unreachable.
+            let box = calibration.phase == .capturing ? calibration.probeBox : appModel.volume
             let proxy = HandProxy(
-                position: appModel.volume.point(at: unit),
+                position: box.point(at: unit),
                 radius: HandProxy.simulatedRadius,
                 updatedAt: 0
             )
@@ -189,6 +300,9 @@ struct ImmersiveView: View {
 
     private func runHitTest() {
         updateProxyMarkers()
+
+        // A capture is a measurement, not a game — targets must not score.
+        guard calibration.phase != .capturing else { return }
 
         let palms = activePalms
         // Only the training hand can score. This is what stops a patient
