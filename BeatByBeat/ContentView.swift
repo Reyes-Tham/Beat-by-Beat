@@ -103,6 +103,19 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
 
+        if !appModel.isPlaying {
+            // Rhythm mode is chart-driven, so nothing but the volume outline
+            // exists until the song starts. Saying so stops that reading as a
+            // failure to spawn.
+            Text("Press Play — targets are spawned by the song, not on standby.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text(pacingLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
         if appModel.judgements.values.reduce(0, +) > 0 {
             HStack(spacing: 16) {
                 ForEach(Judgement.allCases, id: \.self) { judgement in
@@ -194,6 +207,18 @@ struct ContentView: View {
     }
 
     // MARK: - Readouts
+
+    /// Spells out the pacing in seconds, since beats-per-note says nothing
+    /// about whether a level actually feels restful.
+    private var pacingLabel: String {
+        let beat = 60.0 / max(appModel.bpm, 1)
+        let travel = appModel.level.travelBeats * beat
+        let perArm = appModel.level.perArmBeats * beat
+        return String(
+            format: "%.1fs to reach · same arm every %.1fs · %d notes",
+            travel, perArm, appModel.noteCount
+        )
+    }
 
     private var sourceLabel: String {
         let chart = appModel.chartIsAuthored ? "authored chart" : "generated chart"

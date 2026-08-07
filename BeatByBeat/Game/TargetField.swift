@@ -106,7 +106,7 @@ final class TargetField {
         root.addChild(target)
         TargetEntity.playSpawnAnimation(on: target)
         if beatTime != nil {
-            TargetEntity.addApproachShell(to: target, travelTime: travelTime)
+            TargetEntity.addApproachShell(to: target, travelTime: travelTime, hand: hand)
         }
         return target
     }
@@ -178,6 +178,9 @@ final class TargetField {
             missedCount += 1
             onScoreChange?()
 
+            // Stop the countdown too, or the shell keeps shrinking on a target
+            // that is already on its way out.
+            TargetEntity.lockApproachShell(on: target)
             TargetEntity.playMissAnimation(on: target)
             Task {
                 try? await Task.sleep(for: .seconds(TargetEntity.missAnimationSeconds))
@@ -231,22 +234,26 @@ final class TargetField {
         TargetEntity.lockApproachShell(on: target)
         TargetEntity.playHitAnimation(on: target)
 
-        if mode == .practice { pendingSpawns += 1 }
+        let wasPractice = mode == .practice
+        if wasPractice { pendingSpawns += 1 }
 
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(TargetEntity.hitAnimationSeconds))
             target.removeFromParent()
 
-            guard let self, self.mode == .practice else { return }
+            guard let self, wasPractice else { return }
             try? await Task.sleep(for: self.respawnDelay)
-            self.pendingSpawns -= 1
+            // Decremented before the mode check: switching modes mid-flight
+            // used to strand this count, and refill would then permanently
+            // believe a spawn was still pending and never top the field up.
+            self.pendingSpawns = max(0, self.pendingSpawns - 1)
             self.refill(avoiding: self.lastPalms)
         }
     }
 
     // MARK: - Debug outline
 
-    private func redrawOutline() {
+    func redrawOutline() {
         outline.children.forEach { $0.removeFromParent() }
         for corner in volume.corners {
             let dot = TargetEntity.makeDebugDot()

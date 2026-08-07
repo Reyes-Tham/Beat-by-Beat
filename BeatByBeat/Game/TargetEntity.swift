@@ -72,12 +72,15 @@ enum TargetEntity {
     ///
     /// Linear timing on purpose: the shrink rate has to read as a constant
     /// countdown, and easing would make the remaining time misleading.
-    static func addApproachShell(to target: Entity, travelTime: TimeInterval) {
+    static func addApproachShell(to target: Entity, travelTime: TimeInterval, hand: TrainingHand) {
         guard let sphere = target.children.first as? ModelEntity,
               let mesh = sphere.model?.mesh
         else { return }
 
-        let shell = ModelEntity(mesh: mesh, materials: [shellMaterial()])
+        // Tinted to the hand it belongs to, so which arm is being asked for is
+        // readable from the moment the shell appears rather than only once the
+        // target underneath is visible.
+        let shell = ModelEntity(mesh: mesh, materials: [shellMaterial(tint: tint(for: hand))])
         shell.name = "ApproachShell"
         shell.scale = .init(repeating: approachStartScale)
         target.addChild(shell)
@@ -155,11 +158,13 @@ enum TargetEntity {
         }
     }
 
-    /// Faint and unlit — the shell marks time, it shouldn't compete with the
-    /// target for attention.
-    private static func shellMaterial() -> RealityKit.Material {
-        var material = UnlitMaterial(color: .white)
-        material.blending = .transparent(opacity: .init(floatLiteral: 0.16))
+    /// Unlit so it reads the same against a bright room or a dark one. Faint
+    /// enough not to compete with the target, but not so faint that a target
+    /// appears to arrive out of nowhere — that trade-off is what this number
+    /// controls, so tune it here.
+    private static func shellMaterial(tint: UIColor) -> RealityKit.Material {
+        var material = UnlitMaterial(color: tint)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.34))
         return material
     }
 

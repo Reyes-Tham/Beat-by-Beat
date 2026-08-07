@@ -37,10 +37,28 @@ enum ReachLevel: Int, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// Beats between consecutive notes. Equal to `travelBeats` for now, which
-    /// keeps exactly one target in flight. Overlapping targets are a later
-    /// tuning step, not a structural change.
-    var spacingBeats: Double { travelBeats }
+    /// Quiet beats after a target's beat before the next one appears.
+    ///
+    /// Without this the next target spawns the instant the last is contacted,
+    /// so the arms never stop moving. At Minimal the rest is what turns the
+    /// chart into clear turn-taking: reach, return, then the other arm goes.
+    var restBeats: Double {
+        switch self {
+        case .minimal: 4      // ~1.7s of stillness between reaches
+        case .moderate: 2
+        case .challenge: 0    // continuous
+        }
+    }
+
+    /// Beats between consecutive notes.
+    ///
+    /// Kept even so notes land on detected beats rather than on the
+    /// interpolated midpoints of the beat grid.
+    var spacingBeats: Double { travelBeats + restBeats }
+
+    /// Beats between two notes for the *same* arm, when hands alternate.
+    /// This is the number that decides whether Minimal feels restful.
+    var perArmBeats: Double { spacingBeats * 2 }
 
     /// Largest jump between consecutive notes, in unit-cube space.
     /// This is the coordination axis: small = local adjustments, large =

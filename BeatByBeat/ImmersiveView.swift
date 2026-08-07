@@ -59,16 +59,20 @@ struct ImmersiveView: View {
             appModel.simulatedPalmUnit = nil
             updateProxyMarkers()
         }
+        // `bpm` is deliberately absent: it's an output of loading a chart, not
+        // an input. Observing it here made startOrStop's `appModel.bpm = ...`
+        // re-enter configure and wipe the field on the first Play.
         .onChange(of: appModel.mode) { configure() }
         .onChange(of: appModel.level) { configure() }
-        .onChange(of: appModel.bpm) { configure() }
         .onChange(of: appModel.respawnRequests) { configure() }
         .onChange(of: appModel.layout) { configure() }
         .onChange(of: appModel.trainingHand) { configure() }
         .onChange(of: appModel.targetCount) { configure() }
-        .onChange(of: appModel.centerHeight) { configure() }
-        .onChange(of: appModel.centerDistance) { configure() }
-        .onChange(of: appModel.spread) { configure() }
+        // Volume tweaks re-aim future spawns without disturbing live targets,
+        // so they stay usable while a song is running.
+        .onChange(of: appModel.centerHeight) { applySettings() }
+        .onChange(of: appModel.centerDistance) { applySettings() }
+        .onChange(of: appModel.spread) { applySettings() }
         .onChange(of: appModel.showOutline) {
             field?.outlineIsVisible = appModel.showOutline
         }
@@ -130,17 +134,26 @@ struct ImmersiveView: View {
         }
     }
 
-    /// Pushes the tuning knobs into the field and lays it out again.
-    private func configure(_ target: TargetField? = nil) {
+    /// Pushes the tuning knobs into the field without disturbing live targets.
+    private func applySettings(_ target: TargetField? = nil) {
         guard let field = target ?? field else { return }
-        let volume = appModel.volume
-
         field.mode = appModel.mode
-        field.volume = volume
+        field.volume = appModel.volume
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount
         field.outlineIsVisible = appModel.showOutline
+        field.redrawOutline()
+    }
+
+    /// Applies settings and lays the field out again.
+    ///
+    /// Resetting mid-song would clear targets the chart has already scheduled
+    /// and zero the score, so a running song is left alone.
+    private func configure(_ target: TargetField? = nil) {
+        guard let field = target ?? field else { return }
+        applySettings(field)
+        guard !appModel.isPlaying else { return }
         field.reset()
     }
 
