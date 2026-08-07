@@ -84,12 +84,7 @@ struct ImmersiveView: View {
             appModel.songTime = songTime
 
             for due in scheduler.due(at: songTime) {
-                field.spawn(
-                    note: due.note,
-                    beatTime: due.beatTime,
-                    travelTime: due.travelTime,
-                    index: due.index
-                )
+                field.spawn(note: due.note, index: due.index)
             }
             field.expireOverdue(songTime: songTime)
 
@@ -111,14 +106,17 @@ struct ImmersiveView: View {
     private func startOrStop() {
         guard let field else { return }
         if appModel.isPlaying {
-            // Authored chart if one is bundled, generated grid otherwise.
-            let authored = Chart.load(resource: AudioConductor.songResourceName)
-            let chart = authored ?? Chart.generated(
+            // Real beat grid if one is bundled, constant-tempo grid otherwise.
+            let beatMap = BeatMap.load(resource: AudioConductor.beatMapResourceName)
+            let chart = beatMap.map {
+                Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand)
+            } ?? Chart.generated(
                 bpm: appModel.bpm,
                 level: appModel.level,
                 hand: appModel.trainingHand
             )
-            appModel.chartIsAuthored = authored != nil
+            appModel.chartIsAuthored = beatMap != nil
+            appModel.noteCount = chart.notes.count
             appModel.bpm = chart.bpm
             conductor.bpm = chart.bpm
             scheduler.load(chart)

@@ -150,13 +150,13 @@ final class TargetField {
 
     // MARK: - Rhythm spawning
 
-    func spawn(note: ChartNote, beatTime: TimeInterval, travelTime: TimeInterval, index: Int) {
+    func spawn(note: ChartNote, index: Int) {
         spawn(
             at: volume.point(at: note.unit),
             hand: note.hand,
             noteIndex: index,
-            beatTime: beatTime,
-            travelTime: travelTime
+            beatTime: note.time,
+            travelTime: note.travel
         )
     }
 

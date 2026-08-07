@@ -22,6 +22,8 @@ final class AudioConductor {
 
     /// Bundle resource name to look for, minus the extension.
     static let songResourceName = "demo_song"
+    /// Beat grid extracted from that song by tools/beat_reader.py.
+    static let beatMapResourceName = "demo_song_beats"
 
     private(set) var isRunning = false
     private(set) var hasAudio = false

@@ -14,19 +14,15 @@ final class BeatScheduler {
 
     private(set) var chart: Chart?
     private var nextIndex = 0
-    private var beatDuration: TimeInterval = 0.5
 
-    /// A note that should appear now, with its times already in seconds.
+    /// A note that should appear now.
     struct Due {
         let note: ChartNote
         let index: Int
-        let beatTime: TimeInterval
-        let travelTime: TimeInterval
     }
 
     func load(_ chart: Chart) {
         self.chart = chart
-        self.beatDuration = 60.0 / chart.bpm
         nextIndex = 0
     }
 
@@ -39,27 +35,20 @@ final class BeatScheduler {
         return nextIndex >= chart.notes.count
     }
 
+    var noteCount: Int { chart?.notes.count ?? 0 }
+
     /// Notes whose approach should begin at or before `songTime`.
     ///
-    /// A note spawns `travelTime` *before* its beat — the spawn is the cue to
-    /// start moving, and the beat is the arrival deadline.
+    /// A note spawns `travel` seconds *before* its beat — the spawn is the cue
+    /// to start moving, and the beat is the arrival deadline.
     func due(at songTime: TimeInterval) -> [Due] {
         guard let chart else { return [] }
         var ready: [Due] = []
 
         while nextIndex < chart.notes.count {
             let note = chart.notes[nextIndex]
-            let beatTime = note.beat * beatDuration
-            let travelTime = note.travelBeats * beatDuration
-
-            guard songTime >= beatTime - travelTime else { break }
-
-            ready.append(Due(
-                note: note,
-                index: nextIndex,
-                beatTime: beatTime,
-                travelTime: travelTime
-            ))
+            guard songTime >= note.time - note.travel else { break }
+            ready.append(Due(note: note, index: nextIndex))
             nextIndex += 1
         }
 

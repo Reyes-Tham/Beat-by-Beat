@@ -37,8 +37,10 @@ class AppModel {
     var songTime: TimeInterval = 0
     /// Whether a real audio file is driving the clock, or it's free-running.
     var audioIsPlaying = false
-    /// Whether the chart came from a file or was generated on a BPM grid.
+    /// Whether the chart came from the song's real beat grid, or a synthetic
+    /// constant-tempo one.
     var chartIsAuthored = false
+    var noteCount = 0
 
     // MARK: - Spawn tuning
     //
