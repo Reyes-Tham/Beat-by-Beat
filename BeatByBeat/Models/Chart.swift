@@ -129,12 +129,12 @@ extension Chart {
         level: ReachLevel,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
-        gripOrientations: Set<GripOrientation> = [.knob]
+        gripOrientations: Set<GripOrientation> = [.cup]
     ) -> Chart {
         // Never empty: with nothing selected there would be no chart at all.
         let palette = movements.isEmpty ? [MovementType.reach]
                                         : MovementType.allCases.filter(movements.contains)
-        let grips = gripOrientations.isEmpty ? [GripOrientation.knob]
+        let grips = gripOrientations.isEmpty ? [GripOrientation.cup]
                                              : GripOrientation.allCases.filter(gripOrientations.contains)
         var gripIndex = 0
         let beats = beatMap.beats
@@ -219,7 +219,7 @@ extension Chart {
         level: ReachLevel,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
-        gripOrientations: Set<GripOrientation> = [.knob],
+        gripOrientations: Set<GripOrientation> = [.cup],
         seconds: TimeInterval = 120
     ) -> Chart {
         let beatDuration = 60.0 / bpm

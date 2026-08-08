@@ -382,10 +382,10 @@ struct ImmersiveView: View {
                 gripPosition: position,
                 radius: HandProxy.simulatedRadius,
                 updatedAt: 0,
-                // The Simulator has no fingers to close, so the stand-in
-                // always counts as gripping — otherwise grip notes could never
-                // be tested without a headset.
-                gripClosure: 1
+                // No fingers to close in the Simulator, so the stand-in
+                // alternates open and shut on a slow cycle. That way the
+                // open-then-close sequence can still be exercised there.
+                gripClosure: fmod(CACurrentMediaTime(), 2.0) < 1.0 ? 0 : 1
             )
             // One mouse can't have two chiralities: when a specific hand is
             // being trained it takes that side, and only with Both does it

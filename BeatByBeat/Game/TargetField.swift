@@ -255,20 +255,7 @@ final class TargetField {
                 }
 
             case .grip:
-                // Tested against the grasp point, not the wrist: the object
-                // has to be *in the hand*. Arriving isn't enough either — the
-                // hand has to close on it, which is the whole movement.
-                let inHand = distance(palm.proxy.gripPosition, target.position)
-                    <= palm.proxy.radius + component.radius
-                // Orientation too, when the note asks for one: taking a cup and
-                // taking a door knob are different tasks even though the arm
-                // travels the same distance.
-                let turned = component.gripOrientation.map {
-                    $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
-                } ?? true
-                if inHand, palm.proxy.isGripping, turned {
-                    retire(target, component: component, songTime: songTime)
-                }
+                advanceGrip(target, component: component, palm: palm, songTime: songTime)
 
             case .pour:
                 advancePour(target, component: component, palm: palm, songTime: songTime)
@@ -284,6 +271,40 @@ final class TargetField {
         _ radius: Float
     ) -> Bool {
         distance(palm.proxy.position, position) <= palm.proxy.radius + radius
+    }
+
+    /// Grip is a movement, not a pose: the open hand has to be seen at the
+    /// target first, and only then does closing score.
+    ///
+    /// Without the open step a target scored off whatever the hand happened to
+    /// already be doing when it arrived — a patient holding a loose fist swept
+    /// through everything, which is what made grips feel arbitrary.
+    private func advanceGrip(
+        _ target: Entity,
+        component: TargetComponent,
+        palm: (hand: TrainingHand, proxy: HandProxy),
+        songTime: TimeInterval
+    ) {
+        // Grasp point, not the wrist: the object has to be *in the hand*.
+        let inHand = distance(palm.proxy.gripPosition, target.position)
+            <= palm.proxy.radius + component.radius
+        let turned = component.gripOrientation.map {
+            $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
+        } ?? true
+        guard inHand, turned else { return }
+
+        if !component.gripArmed {
+            guard palm.proxy.isOpen else { return }
+            var armed = component
+            armed.gripArmed = true
+            target.components.set(armed)
+            TargetEntity.setGripArmed(target, armed: true, hand: component.hand)
+            return
+        }
+
+        if palm.proxy.isGripping {
+            retire(target, component: component, songTime: songTime)
+        }
     }
 
     /// Walks the hand through a pour's waypoints, in order.

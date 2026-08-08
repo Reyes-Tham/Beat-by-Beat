@@ -18,6 +18,10 @@ struct TargetComponent: Component {
     var movement: MovementType = .reach
     /// Set only on grip targets: how the hand has to be turned.
     var gripOrientation: GripOrientation?
+    /// Grip targets only: the open hand has been seen at the target, so a
+    /// closing hand now counts. Without this the target scores off whatever
+    /// the hand happened to already be doing when it arrived.
+    var gripArmed: Bool = false
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
@@ -162,7 +166,7 @@ enum TargetEntity {
     /// drawn glyph otherwise — drop a PNG in Resources to replace the artwork
     /// without touching this code.
     static func makeGripIcon(radius: Float, orientation: GripOrientation? = nil) -> Entity? {
-        guard let texture = gripTexture else { return nil }
+        guard let texture = gripTexture(for: orientation) else { return nil }
 
         var material = UnlitMaterial()
         material.color = .init(tint: .white, texture: .init(texture))
@@ -171,11 +175,6 @@ enum TargetEntity {
 
         let size = radius * 1.5
         let plane = ModelEntity(mesh: .generatePlane(width: size, height: size), materials: [material])
-        // Turned to show which way the hand has to be, so the orientation is
-        // readable on approach rather than discovered by failing to score.
-        if let orientation {
-            plane.orientation = simd_quatf(angle: orientation.iconRotation, axis: [0, 0, 1])
-        }
         let root = Entity()
         root.name = "GripIcon"
         root.position = [0, radius * 1.85, 0]
@@ -184,20 +183,58 @@ enum TargetEntity {
         return root
     }
 
-    /// Built once on first use. `TextureResource(named:)` is async in current
-    /// RealityKit, so the bundled-asset path is loaded separately by the view
-    /// and handed here; this fallback stays synchronous.
-    nonisolated(unsafe) static var gripTextureOverride: TextureResource?
+    /// One glyph per orientation, built once on first use.
+    ///
+    /// Distinct pictures rather than the same fist rotated: a rotated fist and
+    /// an upright one are hard to tell apart at target size and across the
+    /// room, which is most of why the orientations felt indistinguishable.
+    nonisolated(unsafe) private static var cachedIcons: [String: TextureResource] = [:]
 
-    private static var gripTexture: TextureResource? {
-        if let gripTextureOverride { return gripTextureOverride }
-        if cachedFist == nil, let image = drawFist().cgImage {
-            cachedFist = try? TextureResource(image: image, options: .init(semantic: .color))
+    private static func gripTexture(for orientation: GripOrientation?) -> TextureResource? {
+        let key = orientation?.rawValue ?? "grip"
+        if let cached = cachedIcons[key] { return cached }
+
+        let image: UIImage = switch orientation {
+        case .cup: drawMug()
+        default: drawFist()
         }
-        return cachedFist
+        guard let cgImage = image.cgImage,
+              let texture = try? TextureResource(image: cgImage, options: .init(semantic: .color))
+        else { return nil }
+        cachedIcons[key] = texture
+        return texture
     }
 
-    nonisolated(unsafe) private static var cachedFist: TextureResource?
+    /// Mug outline: square-ish body with a D handle, matching the usual
+    /// pictogram for a cup grasp.
+    private static func drawMug(side: CGFloat = 256) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let c = ctx.cgContext
+            c.setStrokeColor(UIColor.white.cgColor)
+            c.setLineWidth(side * 0.055)
+            c.setLineCap(.round)
+            c.setLineJoin(.round)
+
+            let u = side / 100
+
+            c.addPath(UIBezierPath(
+                roundedRect: CGRect(x: 12 * u, y: 20 * u, width: 52 * u, height: 60 * u),
+                cornerRadius: 8 * u
+            ).cgPath)
+
+            // Handle: a half-round on the right side of the body.
+            let handle = UIBezierPath(
+                arcCenter: CGPoint(x: 64 * u, y: 45 * u),
+                radius: 18 * u,
+                startAngle: -.pi / 2,
+                endAngle: .pi / 2,
+                clockwise: true
+            )
+            c.addPath(handle.cgPath)
+
+            c.strokePath()
+        }
+    }
 
     /// Outline fist, drawn to match the usual grip pictogram: a block of four
     /// finger segments with the thumb folded across them.
@@ -237,9 +274,21 @@ enum TargetEntity {
         }
     }
 
-    private static func gripRingMaterial(tint: UIColor) -> RealityKit.Material {
+    /// Brightens the ring once the open hand has been seen, so the patient can
+    /// tell the difference between "get here" and "now close".
+    static func setGripArmed(_ target: Entity, armed: Bool, hand: TrainingHand) {
+        guard let ring = target.findEntity(named: "GripRing") as? ModelEntity else { return }
+        ring.model?.materials = [
+            gripRingMaterial(tint: armed ? .white : tint(for: hand), opacity: armed ? 0.55 : 0.22)
+        ]
+    }
+
+    private static func gripRingMaterial(
+        tint: UIColor,
+        opacity: Float = 0.22
+    ) -> RealityKit.Material {
         var material = UnlitMaterial(color: tint)
-        material.blending = .transparent(opacity: .init(floatLiteral: 0.22))
+        material.blending = .transparent(opacity: .init(floatLiteral: opacity))
         material.faceCulling = .front
         return material
     }

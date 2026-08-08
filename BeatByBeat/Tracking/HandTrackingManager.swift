@@ -53,6 +53,10 @@ struct HandProxy {
     var palmNormal: SIMD3<Float> = .zero
 
     var isGripping: Bool { gripClosure >= 1 }
+    /// Hand clearly open. The gap between this and `isGripping` is deliberate:
+    /// a grip has to be a *movement* from one to the other, not a hand that
+    /// drifted across a single threshold.
+    var isOpen: Bool { gripClosure <= 0.25 }
 }
 
 /// Streams palm positions from ARKit.

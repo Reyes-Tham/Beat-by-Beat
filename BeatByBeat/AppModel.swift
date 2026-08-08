@@ -38,8 +38,8 @@ class AppModel {
         didSet { if enabledMovements.isEmpty { enabledMovements = [.reach] } }
     }
     /// Hand orientations grip notes may ask for. Never empty while grip is on.
-    var enabledGripOrientations: Set<GripOrientation> = [.knob] {
-        didSet { if enabledGripOrientations.isEmpty { enabledGripOrientations = [.knob] } }
+    var enabledGripOrientations: Set<GripOrientation> = [.cup] {
+        didSet { if enabledGripOrientations.isEmpty { enabledGripOrientations = [.cup] } }
     }
     /// The run just finished, shown on the results screen.
     var lastRun: SessionScore?

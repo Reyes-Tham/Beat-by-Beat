@@ -8,51 +8,30 @@ import simd
 
 /// How the hand has to be turned to take hold of a target.
 ///
-/// Named for real objects rather than for anatomy, because that is how a
-/// patient will think about the movement — and because reaching for a cup and
-/// reaching for a door knob are genuinely different tasks even though the arm
-/// travels the same distance.
-///
-/// Forearm rotation is commonly impaired after a stroke, so every orientation
-/// is opt-in and the tolerance is deliberately wide. This trains turning the
-/// hand; it does not measure how far it turned.
+/// Two orientations, not four. Four sat within 45° of each other once the
+/// tolerance was wide enough to be fair to an impaired forearm, so they could
+/// not actually be told apart — the app was asking for a distinction it had no
+/// way to measure. Cup and overhand are perpendicular, which leaves room for a
+/// generous window around each and still keeps them distinct.
 enum GripOrientation: String, CaseIterable, Identifiable, Codable {
-    /// Palm toward the midline, as if closing around a cup.
+    /// Palm toward the midline, as if closing around a mug.
     case cup
-    /// Palm forward, as if taking a door knob.
-    case knob
     /// Palm down, as if picking something off a table.
     case overhand
-    /// Palm up, as if receiving something.
-    case underhand
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .cup: "Cup"
-        case .knob: "Door knob"
         case .overhand: "Overhand"
-        case .underhand: "Underhand"
         }
     }
 
     var detail: String {
         switch self {
-        case .cup: "Palm inward, closing around a glass"
-        case .knob: "Palm forward, as if turning a handle"
+        case .cup: "Palm inward, closing around a mug"
         case .overhand: "Palm down, lifting off a table"
-        case .underhand: "Palm up, taking something offered"
-        }
-    }
-
-    /// How far the icon is turned on the target, in radians.
-    var iconRotation: Float {
-        switch self {
-        case .knob: 0
-        case .cup: .pi / 2
-        case .overhand: .pi
-        case .underhand: -.pi / 2
         }
     }
 
@@ -62,21 +41,22 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
     /// right hand's palm faces left and a left hand's faces right.
     func requiredPalmNormal(for hand: TrainingHand) -> SIMD3<Float> {
         switch self {
-        case .knob:      [0, 0, -1]                       // away from the player
-        case .cup:       [hand == .left ? 1 : -1, 0, 0]   // toward the midline
-        case .overhand:  [0, -1, 0]
-        case .underhand: [0, 1, 0]
+        case .cup:      [hand == .left ? 1 : -1, 0, 0]
+        case .overhand: [0, -1, 0]
         }
     }
 
-    /// Cosine of the widest acceptable error. 60° — generous on purpose:
-    /// a narrow window would be measuring pronation and supination range
-    /// rather than training the reach-and-turn.
-    static let tolerance: Float = 0.5
+    /// Cosine of the widest acceptable error, ~41°.
+    ///
+    /// The two orientations are 90° apart, so anything looser than cos(45°)
+    /// makes a palm held exactly between them satisfy *both* — which is how
+    /// the orientations stopped meaning anything. This leaves a small dead
+    /// band in the middle instead: a hand that hasn't committed to either turn
+    /// scores neither, which is the honest answer.
+    static let tolerance: Float = 0.75
 
     func matches(palmNormal: SIMD3<Float>, hand: TrainingHand) -> Bool {
-        let required = requiredPalmNormal(for: hand)
         guard length(palmNormal) > 0.1 else { return true }  // unknown → don't block
-        return dot(normalize(palmNormal), required) >= Self.tolerance
+        return dot(normalize(palmNormal), requiredPalmNormal(for: hand)) >= Self.tolerance
     }
 }
