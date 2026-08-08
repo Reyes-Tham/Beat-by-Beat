@@ -20,6 +20,7 @@ struct ImmersiveView: View {
     @State private var previewRoot = Entity()
     @State private var lastCalibrationTick: TimeInterval = 0
     @State private var hitSound: AudioFileResource?
+    @State private var spawnSound: AudioFileResource?
 
     var body: some View {
         RealityView { content in
@@ -137,7 +138,12 @@ struct ImmersiveView: View {
                 named: "hit_ding.caf",
                 configuration: .init(shouldLoop: false)
             )
+            spawnSound = try await AudioFileResource(
+                named: "spawn_cue.caf",
+                configuration: .init(shouldLoop: false)
+            )
             field?.hitSound = hitSound
+            field?.spawnSound = spawnSound
         } catch {
             // Not fatal: the shatter and praise still land, just silently.
             print("[Audio] hit sound unavailable: \(error)")
@@ -288,11 +294,13 @@ struct ImmersiveView: View {
             let song = appModel.selectedSong
             let beatMap = song.beatMapResource.flatMap { BeatMap.load(resource: $0) }
             let chart = beatMap.map {
-                Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand)
+                Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand,
+                            movements: appModel.enabledMovements)
             } ?? Chart.generated(
                 bpm: song.bpm,
                 level: appModel.level,
-                hand: appModel.trainingHand
+                hand: appModel.trainingHand,
+                movements: appModel.enabledMovements
             )
             appModel.chartIsAuthored = beatMap != nil
             appModel.noteCount = chart.notes.count
@@ -319,6 +327,7 @@ struct ImmersiveView: View {
         field.volume = appModel.volume
         field.volumeForHand = { appModel.volume(for: $0) }
         field.hitSound = hitSound
+        field.spawnSound = spawnSound
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount

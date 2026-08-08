@@ -7,7 +7,15 @@ import RealityKit
 import SwiftUI
 
 /// Marks an entity as a hittable rhythm target.
+/// Progress through a pour's waypoints.
+struct PourComponent: Component {
+    var waypoints: [SIMD3<Float>]
+    var nextIndex: Int = 0
+    var isComplete: Bool { nextIndex >= waypoints.count }
+}
+
 struct TargetComponent: Component {
+    var movement: MovementType = .reach
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
@@ -28,8 +36,13 @@ enum TargetEntity {
     static func make(
         hand: TrainingHand,
         radius: Float = defaultRadius,
-        noteIndex: Int = -1
+        noteIndex: Int = -1,
+        movement: MovementType = .reach
     ) -> Entity {
+        if movement == .pour {
+            return makePourTube(hand: hand, radius: radius, noteIndex: noteIndex)
+        }
+
         let root = Entity()
         root.name = "Target[\(hand.rawValue)#\(noteIndex)]"
 
@@ -53,9 +66,92 @@ enum TargetEntity {
             shapes: [.generateSphere(radius: radius)],
             mode: .trigger
         ))
-        root.components.set(TargetComponent(hand: hand, radius: radius, noteIndex: noteIndex))
+        if movement == .grip {
+            // A ring around the sphere: reads as something to close a hand on
+            // rather than something to bump into.
+            let ring = ModelEntity(
+                mesh: .generateSphere(radius: radius * 1.5),
+                materials: [gripRingMaterial(tint: tint(for: hand))]
+            )
+            ring.name = "GripRing"
+            root.addChild(ring)
+        }
+
+        root.components.set(TargetComponent(
+            movement: movement,
+            hand: hand,
+            radius: radius,
+            noteIndex: noteIndex
+        ))
 
         return root
+    }
+
+    /// Number of waypoints along a pour path.
+    nonisolated static let pourWaypoints = 5
+
+    /// A curved tube the hand is guided along, waypoint by waypoint.
+    ///
+    /// An arc rather than a straight line: pouring is a controlled trajectory
+    /// with forearm rotation, and a straight path would just be a slow reach.
+    static func makePourTube(
+        hand: TrainingHand,
+        radius: Float,
+        noteIndex: Int
+    ) -> Entity {
+        let root = Entity()
+        root.name = "Pour[\(hand.rawValue)#\(noteIndex)]"
+
+        // Arc sweeps across the body and lifts in the middle, mirrored so each
+        // arm curves outward from its own side.
+        let direction: Float = hand == .left ? -1 : 1
+        let span: Float = 0.30
+        var points: [SIMD3<Float>] = []
+        for step in 0..<pourWaypoints {
+            let t = Float(step) / Float(pourWaypoints - 1)
+            points.append([
+                (t - 0.5) * span * direction,
+                sin(t * .pi) * 0.10,
+                -sin(t * .pi) * 0.04
+            ])
+        }
+
+        for (index, point) in points.enumerated() {
+            let node = ModelEntity(
+                mesh: .generateSphere(radius: radius * 0.55),
+                materials: [material(tint: tint(for: hand), opacity: 1.0)]
+            )
+            node.name = "Way\(index)"
+            node.position = point
+            // All but the first start dim: the lit one is where to go next.
+            node.components.set(OpacityComponent(opacity: index == 0 ? 1 : 0.28))
+            root.addChild(node)
+        }
+
+        root.components.set(PourComponent(waypoints: points))
+        root.components.set(TargetComponent(
+            movement: .pour,
+            hand: hand,
+            radius: radius * 0.9,
+            noteIndex: noteIndex
+        ))
+        return root
+    }
+
+    /// Lights the next waypoint and dims the ones already passed.
+    static func updatePour(_ entity: Entity, nextIndex: Int) {
+        for index in 0..<pourWaypoints {
+            guard let node = entity.findEntity(named: "Way\(index)") else { continue }
+            let opacity: Float = index < nextIndex ? 0.12 : (index == nextIndex ? 1 : 0.28)
+            node.components.set(OpacityComponent(opacity: opacity))
+        }
+    }
+
+    private static func gripRingMaterial(tint: UIColor) -> RealityKit.Material {
+        var material = UnlitMaterial(color: tint)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.22))
+        material.faceCulling = .front
+        return material
     }
 
     /// "L" or "R" sitting on the face of the target.

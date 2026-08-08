@@ -52,6 +52,10 @@ final class TargetField {
     var onScoreChange: (() -> Void)?
     /// Ding played on contact. Nil until the resource finishes loading.
     var hitSound: AudioFileResource?
+    /// Chime played where a target appears, so it can be located by ear before
+    /// it is found by eye. Targets spawn off to the side often enough that a
+    /// purely visual cue means looking around for them.
+    var spawnSound: AudioFileResource?
 
     private let root: Entity
     private let outline: Entity
@@ -127,9 +131,12 @@ final class TargetField {
         radius: Float = TargetEntity.defaultRadius,
         noteIndex: Int = -1,
         beatTime: TimeInterval? = nil,
-        travelTime: TimeInterval = 1
+        travelTime: TimeInterval = 1,
+        movement: MovementType = .reach
     ) -> Entity {
-        let target = TargetEntity.make(hand: hand, radius: radius, noteIndex: noteIndex)
+        let target = TargetEntity.make(
+            hand: hand, radius: radius, noteIndex: noteIndex, movement: movement
+        )
         target.position = position
         target.components[TargetComponent.self]?.beatTime = beatTime
         target.components[TargetComponent.self]?.travelTime = travelTime
@@ -137,6 +144,10 @@ final class TargetField {
         TargetEntity.playSpawnAnimation(on: target)
         if beatTime != nil {
             TargetEntity.addApproachShell(to: target, travelTime: travelTime, hand: hand)
+        }
+        if let spawnSound {
+            target.spatialAudio = SpatialAudioComponent()
+            target.playAudio(spawnSound)
         }
         return target
     }
@@ -187,7 +198,8 @@ final class TargetField {
             hand: note.hand,
             noteIndex: index,
             beatTime: note.time,
-            travelTime: note.travel
+            travelTime: note.travel,
+            movement: note.movement
         )
     }
 
@@ -231,17 +243,58 @@ final class TargetField {
 
         for target in activeTargets {
             guard let component = target.components[TargetComponent.self] else { continue }
-            let reach = palms.first { palm in
-                palm.hand == component.hand
-                    && distance(palm.proxy.position, target.position)
-                        <= palm.proxy.radius + component.radius
-            }
-            if reach != nil {
-                retire(target, component: component, songTime: songTime)
+            guard let palm = palms.first(where: { $0.hand == component.hand }) else { continue }
+
+            switch component.movement {
+            case .reach:
+                if touches(palm, target.position, component.radius) {
+                    retire(target, component: component, songTime: songTime)
+                }
+
+            case .grip:
+                // Arriving isn't enough — the hand has to close on it. That's
+                // the whole point of the movement.
+                if touches(palm, target.position, component.radius), palm.proxy.isGripping {
+                    retire(target, component: component, songTime: songTime)
+                }
+
+            case .pour:
+                advancePour(target, component: component, palm: palm, songTime: songTime)
             }
         }
 
         if mode == .practice { refill(avoiding: lastPalms) }
+    }
+
+    private func touches(
+        _ palm: (hand: TrainingHand, proxy: HandProxy),
+        _ position: SIMD3<Float>,
+        _ radius: Float
+    ) -> Bool {
+        distance(palm.proxy.position, position) <= palm.proxy.radius + radius
+    }
+
+    /// Walks the hand through a pour's waypoints, in order.
+    ///
+    /// Strictly in order: skipping to the end would turn a guided trajectory
+    /// back into a single reach, which is the thing pour exists not to be.
+    private func advancePour(
+        _ target: Entity,
+        component: TargetComponent,
+        palm: (hand: TrainingHand, proxy: HandProxy),
+        songTime: TimeInterval
+    ) {
+        guard var pour = target.components[PourComponent.self], !pour.isComplete else { return }
+        let waypoint = target.position + pour.waypoints[pour.nextIndex]
+        guard touches(palm, waypoint, component.radius) else { return }
+
+        pour.nextIndex += 1
+        target.components.set(pour)
+        TargetEntity.updatePour(target, nextIndex: pour.nextIndex)
+
+        if pour.isComplete {
+            retire(target, component: component, songTime: songTime)
+        }
     }
 
     /// Removes a reached target, scores it, and queues a replacement in

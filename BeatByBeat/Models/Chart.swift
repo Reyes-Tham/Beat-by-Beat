@@ -53,16 +53,25 @@ struct ChartNote: Codable, Equatable {
     var hand: TrainingHand
     /// Position within the spawn volume, each axis 0...1.
     var unit: SIMD3<Float>
+    /// What the player has to do when they get there.
+    var movement: MovementType = .reach
 
     private enum CodingKeys: String, CodingKey {
-        case time, travel, hand, x, y, z
+        case time, travel, hand, x, y, z, movement
     }
 
-    init(time: TimeInterval, travel: TimeInterval, hand: TrainingHand, unit: SIMD3<Float>) {
+    init(
+        time: TimeInterval,
+        travel: TimeInterval,
+        hand: TrainingHand,
+        unit: SIMD3<Float>,
+        movement: MovementType = .reach
+    ) {
         self.time = time
         self.travel = travel
         self.hand = hand
         self.unit = unit
+        self.movement = movement
     }
 
     // SIMD3 isn't usefully Codable, so x/y/z go over the wire separately.
@@ -76,6 +85,7 @@ struct ChartNote: Codable, Equatable {
             try container.decode(Float.self, forKey: .y),
             try container.decode(Float.self, forKey: .z)
         )
+        movement = try container.decodeIfPresent(MovementType.self, forKey: .movement) ?? .reach
     }
 
     func encode(to encoder: Encoder) throws {
@@ -86,6 +96,7 @@ struct ChartNote: Codable, Equatable {
         try container.encode(unit.x, forKey: .x)
         try container.encode(unit.y, forKey: .y)
         try container.encode(unit.z, forKey: .z)
+        try container.encode(movement, forKey: .movement)
     }
 }
 
@@ -108,8 +119,12 @@ extension Chart {
     static func build(
         from beatMap: BeatMap,
         level: ReachLevel,
-        hand: TrainingHand
+        hand: TrainingHand,
+        movements: Set<MovementType> = [.reach]
     ) -> Chart {
+        // Never empty: with nothing selected there would be no chart at all.
+        let palette = movements.isEmpty ? [MovementType.reach]
+                                        : MovementType.allCases.filter(movements.contains)
         let beats = beatMap.beats
         let travelBeats = Int(level.travelBeats)
         let spacing = Int(level.spacingBeats)
@@ -134,13 +149,17 @@ extension Chart {
             )
             cursors[noteHand] = position
 
+            // Cycled rather than random so every selected movement gets an
+            // even share and none can go missing from a short run.
+            let movement = palette[placed % palette.count]
             notes.append(ChartNote(
                 time: beats[index],
                 // Travel spans real beats, so it tracks any tempo drift in the
                 // song instead of assuming a constant period.
-                travel: beats[index] - beats[index - travelBeats],
+                travel: (beats[index] - beats[index - travelBeats]) * movement.travelMultiplier,
                 hand: noteHand,
-                unit: position
+                unit: position,
+                movement: movement
             ))
             index += spacing
             placed += 1
@@ -179,6 +198,7 @@ extension Chart {
         bpm: Double,
         level: ReachLevel,
         hand: TrainingHand,
+        movements: Set<MovementType> = [.reach],
         seconds: TimeInterval = 120
     ) -> Chart {
         let beatDuration = 60.0 / bpm
@@ -188,7 +208,7 @@ extension Chart {
             bpm: bpm,
             beats: (0..<count).map { Double($0) * beatDuration }
         )
-        return build(from: synthetic, level: level, hand: hand)
+        return build(from: synthetic, level: level, hand: hand, movements: movements)
     }
 
     /// Random walk inside one arm's allowed box.

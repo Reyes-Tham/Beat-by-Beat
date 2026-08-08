@@ -26,8 +26,16 @@ class AppModel {
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
     /// Which screen the window is showing.
-    enum Screen { case songSelection, game }
+    enum Screen { case songSelection, countdown, game, results }
     var screen: Screen = .songSelection
+
+    /// Movements this session trains. Never empty — with nothing ticked there
+    /// would be no chart at all.
+    var enabledMovements: Set<MovementType> = [.reach] {
+        didSet { if enabledMovements.isEmpty { enabledMovements = [.reach] } }
+    }
+    /// The run just finished, shown on the results screen.
+    var lastRun: SessionScore?
 
     var selectedSong: Song = .default
     /// Best previous run for the current song and level, if any.
@@ -35,12 +43,19 @@ class AppModel {
         ScoreStore.best(song: selectedSong.id, level: level)
     }
 
+    /// Counts in first; the game screen starts the song when it lands.
     func startGame() {
-        screen = .game
         hitCount = 0
         missedCount = 0
         judgements = [:]
+        lastRun = nil
         mode = .rhythm
+        screen = .countdown
+    }
+
+    func countdownFinished() {
+        screen = .game
+        isPlaying = true
     }
 
     func backToSongs() {
@@ -48,20 +63,19 @@ class AppModel {
         screen = .songSelection
     }
 
-    /// Files the run that just ended. Called when the chart runs out.
+    /// Files the run that just ended and shows the summary.
     func recordRun() {
         guard noteCount > 0 else { return }
-        ScoreStore.record(
-            SessionScore(
-                reached: hitCount,
-                total: noteCount,
-                excellent: judgements[.excellent] ?? 0,
-                good: judgements[.good] ?? 0,
-                date: Date()
-            ),
-            song: selectedSong.id,
-            level: level
+        let run = SessionScore(
+            reached: hitCount,
+            total: noteCount,
+            excellent: judgements[.excellent] ?? 0,
+            good: judgements[.good] ?? 0,
+            date: Date()
         )
+        ScoreStore.record(run, song: selectedSong.id, level: level)
+        lastRun = run
+        screen = .results
     }
 
     // MARK: - Session config

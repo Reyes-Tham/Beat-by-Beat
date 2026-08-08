@@ -220,6 +220,49 @@ struct SongSelectionView: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(.thinMaterial))
 
             difficulty
+            movements
+        }
+    }
+
+    /// Movement selection. Checkboxes rather than a single level because these
+    /// train different things: someone can have a usable reach and no grasp,
+    /// or the reverse, and a therapist should be able to pick.
+    private var movements: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Movements")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+
+            ForEach(MovementType.allCases) { movement in
+                let isOn = appModel.enabledMovements.contains(movement)
+                Button {
+                    if isOn {
+                        appModel.enabledMovements.remove(movement)
+                    } else {
+                        appModel.enabledMovements.insert(movement)
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                            .font(.title3)
+                            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        Image(systemName: movement.symbol)
+                            .frame(width: 26)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(movement.displayName)
+                            Text(movement.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+                .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
+                .hoverEffect()
+            }
         }
     }
 

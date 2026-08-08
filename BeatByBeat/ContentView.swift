@@ -18,8 +18,21 @@ struct ContentView: View {
             switch appModel.screen {
             case .songSelection:
                 SongSelectionView(showSettings: $showSettings)
+            case .countdown:
+                CountdownView(songTitle: appModel.selectedSong.title) {
+                    appModel.countdownFinished()
+                }
+                .frame(width: 520, height: 520)
             case .game:
                 GameView(showSettings: $showSettings)
+            case .results:
+                ResultsView(score: appModel.lastRun ?? .init(
+                    reached: appModel.hitCount, total: appModel.noteCount,
+                    excellent: 0, good: 0, date: Date()
+                )) {
+                    appModel.backToSongs()
+                }
+                .frame(width: 620, height: 660)
             }
         }
         .sheet(isPresented: $showSettings) {

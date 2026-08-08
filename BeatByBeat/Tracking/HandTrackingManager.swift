@@ -32,9 +32,18 @@ struct HandProxy {
     /// contact feels — that's `defaultRadius`, and only on device.
     static let simulatedRadius: Float = 0.085
 
+    /// Thumb-to-index distance under which the hand counts as closed.
+    /// Generous: a hemiparetic hand often can't fully oppose, and the point is
+    /// to train the attempt, not to measure pinch precision.
+    static let gripThreshold: Float = 0.045
+
     var position: SIMD3<Float>
     var radius: Float = HandProxy.defaultRadius
     var updatedAt: TimeInterval
+    /// How closed the hand is, 0 open … 1 shut.
+    var gripClosure: Float = 0
+
+    var isGripping: Bool { gripClosure >= 1 }
 }
 
 /// Streams palm positions from ARKit.
@@ -157,7 +166,25 @@ final class HandTrackingManager {
         let world = anchor.originFromAnchorTransform * wrist.anchorFromJointTransform
         return HandProxy(
             position: SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z),
-            updatedAt: anchor.timestamp
+            updatedAt: anchor.timestamp,
+            gripClosure: closure(of: skeleton)
         )
+    }
+
+    /// Thumb tip to index tip, mapped to 0…1. Nil-safe: an untracked fingertip
+    /// reports open rather than closed, so a tracking gap can never look like
+    /// a successful grip.
+    private static func closure(of skeleton: HandSkeleton) -> Float {
+        let thumb = skeleton.joint(.thumbTip)
+        let index = skeleton.joint(.indexFingerTip)
+        guard thumb.isTracked, index.isTracked else { return 0 }
+
+        let a = thumb.anchorFromJointTransform.columns.3
+        let b = index.anchorFromJointTransform.columns.3
+        let gap = distance(SIMD3(a.x, a.y, a.z), SIMD3(b.x, b.y, b.z))
+
+        let open: Float = 0.11
+        let shut = HandProxy.gripThreshold
+        return min(1, max(0, (open - gap) / (open - shut)))
     }
 }
