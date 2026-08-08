@@ -200,6 +200,20 @@ struct SettingsView: View {
                 LabeledContent("Captured") {
                     Text(profile.createdAt, style: .relative)
                 }
+                if let used = profile.lastUsedAt {
+                    LabeledContent("Last played") {
+                        Text(used, style: .relative)
+                    }
+                }
+
+                // Separate from recalibrating on purpose: a patient who has
+                // shifted in their chair needs the box moved, not measured
+                // again, and the two are easy to confuse from the outside.
+                Button("Recentre on where I'm sitting") {
+                    dismiss()
+                    appModel.startRecenter()
+                }
+                .disabled(appModel.immersiveSpaceState != .open)
 
                 if profile.wasTrackingLimited {
                     // Worth calling out separately: these limits are the

@@ -27,7 +27,35 @@ struct ImmersiveView: View {
     @State private var discoRoot = Entity()
     @State private var spawnSound: AudioFileResource?
 
+    /// Split in two. One chain of every hook grew past what the type checker
+    /// will attempt on a single expression, and it gave up rather than slowing
+    /// down — so the field settings live on their own.
     var body: some View {
+        scene
+            .onChange(of: appModel.useCalibration) { configure() }
+            .onChange(of: appModel.simulateHandWithMouse) {
+                appModel.simulatedPalmUnit = nil
+                updateProxyMarkers()
+            }
+            // `bpm` is deliberately absent: it's an output of loading a chart,
+            // not an input. Observing it here made startOrStop's
+            // `appModel.bpm = ...` re-enter configure and wipe the field on the
+            // first Play.
+            .onChange(of: appModel.mode) { configure() }
+            .onChange(of: appModel.level) { configure() }
+            .onChange(of: appModel.respawnRequests) { configure() }
+            .onChange(of: appModel.layout) { configure() }
+            .onChange(of: appModel.trainingHand) { configure() }
+            .onChange(of: appModel.targetCount) { configure() }
+            // Volume tweaks re-aim future spawns without disturbing live
+            // targets, so they stay usable while a song is running.
+            .onChange(of: appModel.manualWorkspaces) { applySettings() }
+            .onChange(of: appModel.showOutline) {
+                field?.outlineIsVisible = appModel.showOutline
+            }
+    }
+
+    private var scene: some View {
         RealityView { content in
             // Positions are relative to the immersive space origin, which
             // visionOS puts on the floor beneath the player, facing -Z. ARKit
@@ -71,6 +99,9 @@ struct ImmersiveView: View {
             // pending request is picked up here rather than being dropped.
             if appModel.screen == .calibration, calibration.phase == .idle {
                 beginCalibration()
+            } else if appModel.screen == .recenter, calibration.phase == .idle {
+                calibration.beginRecenter()
+                publishCalibrationState()
             }
 
             for hand in [TrainingHand.left, .right] {
@@ -101,25 +132,17 @@ struct ImmersiveView: View {
         .onChange(of: appModel.calibrationRequests) { beginCalibration() }
         .onChange(of: appModel.calibrationCancelRequests) { cancelCalibration() }
         .onChange(of: appModel.calibrationAdvanceRequests) { calibration.acceptNow() }
-        .onChange(of: appModel.useCalibration) { configure() }
-        .onChange(of: appModel.simulateHandWithMouse) {
-            appModel.simulatedPalmUnit = nil
-            updateProxyMarkers()
+        .onChange(of: appModel.recenterRequests) { beginRecenter() }
+        .onChange(of: appModel.recenterAcceptRequests) {
+            calibration.acceptRecenter(head: handTracking.deviceTransform())
+            // Applied here as well as in the tick: the tick only routes while
+            // the phase is `.recentring`, and this call has just left it.
+            applyRecenterIfDone()
         }
-        // `bpm` is deliberately absent: it's an output of loading a chart, not
-        // an input. Observing it here made startOrStop's `appModel.bpm = ...`
-        // re-enter configure and wipe the field on the first Play.
-        .onChange(of: appModel.mode) { configure() }
-        .onChange(of: appModel.level) { configure() }
-        .onChange(of: appModel.respawnRequests) { configure() }
-        .onChange(of: appModel.layout) { configure() }
-        .onChange(of: appModel.trainingHand) { configure() }
-        .onChange(of: appModel.targetCount) { configure() }
-        // Volume tweaks re-aim future spawns without disturbing live targets,
-        // so they stay usable while a song is running.
-        .onChange(of: appModel.manualWorkspaces) { applySettings() }
-        .onChange(of: appModel.showOutline) {
-            field?.outlineIsVisible = appModel.showOutline
+        .onChange(of: appModel.recenterCancelRequests) {
+            calibration.cancel()
+            publishCalibrationState()
+            configure()
         }
     }
 
@@ -130,6 +153,11 @@ struct ImmersiveView: View {
 
         if calibration.phase == .capturing || calibration.phase == .confirming {
             tickCalibration()
+            return
+        }
+
+        if calibration.phase == .recentring {
+            tickRecenter()
             return
         }
 
@@ -206,9 +234,56 @@ struct ImmersiveView: View {
         appModel.isPlaying = false
         field.clearTargets()
         field.outlineIsVisible = false
-        calibration.begin(hand: appModel.trainingHand)
+        calibration.begin(
+            hand: appModel.trainingHand,
+            anchor: handTracking.deviceTransform().map(HeadAnchor.init(head:))
+        )
         lastCalibrationTick = CACurrentMediaTime()
         buildReachPreview()
+        publishCalibrationState()
+    }
+
+    // MARK: - Recentring
+
+    private func beginRecenter() {
+        guard let field else { return }
+        appModel.isPlaying = false
+        field.clearTargets()
+        field.outlineIsVisible = false
+        calibration.beginRecenter()
+        lastCalibrationTick = CACurrentMediaTime()
+        publishCalibrationState()
+    }
+
+    private func tickRecenter() {
+        let now = CACurrentMediaTime()
+        let dt = min(0.1, now - lastCalibrationTick)
+        lastCalibrationTick = now
+
+        calibration.updateRecenter(head: handTracking.deviceTransform(), deltaTime: dt)
+        applyRecenterIfDone()
+        publishCalibrationState()
+    }
+
+    /// Moves the saved reach onto where the patient settled, and plays on.
+    ///
+    /// The moved profile is saved over the old one, so the anchor it carries is
+    /// always the last place it was used from. Recentring from a stale anchor
+    /// every time would make each session's correction relative to a chair
+    /// nobody has sat in for a week.
+    private func applyRecenterIfDone() {
+        guard calibration.phase == .recentred else { return }
+
+        if let anchor = calibration.recenterAnchor, let saved = appModel.calibration {
+            appModel.calibration = saved.recentred(to: anchor)
+            appModel.seedManualFromCalibration()
+        }
+        appModel.useCalibration = appModel.calibration != nil
+
+        calibration.cancel()
+        clearCalibrationScene()
+        configure()
+        if appModel.screen == .recenter { appModel.screen = .songSelection }
         publishCalibrationState()
     }
 
@@ -339,6 +414,12 @@ struct ImmersiveView: View {
         appModel.calibrationCanConfirm = calibration.hasMoved
         appModel.calibrationHandSteady = calibration.isHandSteady
         appModel.calibrationSpan = calibration.currentBox?.size ?? .zero
+        appModel.isRecentring = calibration.phase == .recentring
+        appModel.recenterProgress = calibration.recenterProgress
+        appModel.recenterAwaitingHead = calibration.awaitingHead
+        appModel.recenterTurn = calibration.currentHead.flatMap {
+            appModel.calibration?.facingChange(from: $0)
+        }
     }
 
     /// Coloured lights orbiting the play volume. Developer mode only.

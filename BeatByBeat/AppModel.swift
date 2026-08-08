@@ -15,6 +15,10 @@ class AppModel {
         // file that declares `body: some Scene` makes `Scene` ambiguous.
         TargetComponent.registerComponent()
         calibration = CalibrationProfile.loadSaved()
+        // Measuring six reaches per arm is the price of a first session, not of
+        // every one. With a profile on file the launch asks only that they sit
+        // the way they mean to play, and moves the saved reach onto that.
+        screen = calibration == nil ? .calibration : .recenter
     }
 
     let immersiveSpaceID = "ImmersiveSpace"
@@ -26,10 +30,11 @@ class AppModel {
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
     /// Which screen the window is showing.
-    enum Screen { case songSelection, calibration, statistics, countdown, game, results }
-    /// Launches into calibration. Reach varies between sessions, so a profile
-    /// from yesterday is a starting point rather than a measurement of today —
-    /// and a stale envelope silently places every target in the wrong place.
+    enum Screen {
+        case songSelection, calibration, recenter, statistics, countdown, game, results
+    }
+    /// Set in `init` from whether there is a saved profile: recentre if there
+    /// is, measure from scratch if not.
     var screen: Screen = .calibration
 
     /// Movements this session trains. Never empty — with nothing ticked there
@@ -52,6 +57,9 @@ class AppModel {
 
     /// Counts in first; the game screen starts the song when it lands.
     func startGame() {
+        // Stamped at the point of play, not of loading: this is what makes the
+        // saved profile the one in use rather than merely the one on disk.
+        calibration?.lastUsedAt = Date()
         hitCount = 0
         missedCount = 0
         judgements = [:]
@@ -308,6 +316,38 @@ class AppModel {
     }
     func cancelCalibration() {
         calibrationCancelRequests += 1
+        screen = .songSelection
+    }
+
+    // MARK: - Recentring
+    //
+    // Same mirror-and-request shape as calibration: the screen publishes
+    // intent, the RealityView owns the head pose and does the work.
+
+    var isRecentring = false
+    /// 0...1 while the head is held in one place.
+    var recenterProgress: Float = 0
+    var recenterAwaitingHead = true
+    /// How far the patient is turned from where the saved reach was measured,
+    /// radians. Nil when there is no head pose, or nothing to compare against.
+    var recenterTurn: Float?
+    private(set) var recenterRequests = 0
+    private(set) var recenterAcceptRequests = 0
+    private(set) var recenterCancelRequests = 0
+
+    func startRecenter() {
+        guard calibration != nil else { return startCalibration() }
+        screen = .recenter
+        recenterRequests += 1
+    }
+
+    /// Take the position as it is now instead of waiting out the hold. With no
+    /// head pose to take — the Simulator has none — this keeps the saved reach
+    /// where it was measured, which is the only sensible reading of "start".
+    func acceptRecenter() { recenterAcceptRequests += 1 }
+
+    func cancelRecenter() {
+        recenterCancelRequests += 1
         screen = .songSelection
     }
 

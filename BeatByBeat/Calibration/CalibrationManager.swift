@@ -34,12 +34,24 @@ final class CalibrationManager {
         /// Six points captured; waiting for the confirm glance.
         case confirming
         case finished
+        /// Settling into position so a saved reach can be lifted onto it. No
+        /// arm movement is asked for — this only reads where the head is.
+        case recentring
+        /// Head pose taken; the saved profile can be moved onto it.
+        case recentred
     }
 
     static let dwellDuration: TimeInterval = 3.0
     static let dwellConeDegrees: Float = 12
     /// How long the arm must be still before a direction is accepted.
     static let holdDuration: TimeInterval = 1.0
+    /// Shorter than the confirm dwell: sitting still is most of what this asks
+    /// for, and people are already still by the time they've read the screen.
+    static let recenterDuration: TimeInterval = 1.5
+    /// Slack allowed while holding. Wide enough for breathing and the sway of
+    /// sitting upright, tight enough to exclude someone still settling in.
+    static let recenterDrift: Float = 0.05
+    static let recenterYaw: Float = 0.14
 
     private(set) var phase: Phase = .idle
     private(set) var profile: CalibrationProfile?
@@ -71,6 +83,20 @@ final class CalibrationManager {
     private var lastSample: (position: SIMD3<Float>, time: TimeInterval)?
     private var safetyScale: Float = 0.85
     private var sessionHand: TrainingHand = .both
+    private var captureAnchor: HeadAnchor?
+
+    // MARK: - Recentring state
+
+    /// 0...1 while the head is held in one place.
+    private(set) var recenterProgress: Float = 0
+    /// Where the head settled. Nil when it was never seen — the Simulator
+    /// reports no pose at all, and a locked-in recentre there means "keep the
+    /// saved reach exactly as it is".
+    private(set) var recenterAnchor: HeadAnchor?
+    private(set) var awaitingHead = true
+    /// Latest head pose seen while recentring, for the facing check.
+    private(set) var currentHead: HeadAnchor?
+    private var recenterReference: HeadAnchor?
 
     /// Hand is roughly parked. Generous enough to allow tremor and the drift of
     /// holding a position, strict enough to exclude an arm still sweeping
@@ -95,9 +121,13 @@ final class CalibrationManager {
 
     // MARK: - Lifecycle
 
-    func begin(hand: TrainingHand, safetyScale: Float = 0.85) {
+    func begin(hand: TrainingHand, anchor: HeadAnchor?, safetyScale: Float = 0.85) {
         self.safetyScale = safetyScale
         self.sessionHand = hand
+        // Taken at the start rather than the end: this is where the patient was
+        // sitting when they reached, and by the last direction they may be
+        // leaning after a target.
+        self.captureAnchor = anchor
         var order: [TrainingHand] = hand == .both ? [.left, .right] : [hand]
         totalHands = order.count
         capturedHands = 0
@@ -113,6 +143,67 @@ final class CalibrationManager {
         phase = .idle
         lastSample = nil
         confirmCircle = nil
+        recenterReference = nil
+        recenterProgress = 0
+    }
+
+    // MARK: - Recentring
+
+    func beginRecenter() {
+        phase = .recentring
+        recenterProgress = 0
+        recenterAnchor = nil
+        recenterReference = nil
+        awaitingHead = true
+        steadyFor = 0
+    }
+
+    /// Feed every frame while recentring. Locks itself in once the head has
+    /// stayed in one place, so the patient only has to sit the way they mean to
+    /// play — there is nothing to press and nothing to reach for.
+    func updateRecenter(head: simd_float4x4?, deltaTime: TimeInterval) {
+        guard phase == .recentring else { return }
+
+        guard let head else {
+            awaitingHead = true
+            currentHead = nil
+            recenterReference = nil
+            recenterProgress = 0
+            steadyFor = 0
+            return
+        }
+        awaitingHead = false
+
+        let anchor = HeadAnchor(head: head)
+        currentHead = anchor
+        guard let reference = recenterReference,
+              anchor.isClose(to: reference,
+                             within: Self.recenterDrift,
+                             radians: Self.recenterYaw)
+        else {
+            // Restart the hold against where they are now, not where they were.
+            recenterReference = anchor
+            steadyFor = 0
+            recenterProgress = 0
+            return
+        }
+
+        steadyFor += deltaTime
+        recenterProgress = min(1, Float(steadyFor / Self.recenterDuration))
+        if steadyFor >= Self.recenterDuration { lockRecenter(anchor) }
+    }
+
+    /// Manual lock, for the therapist and for the Simulator, where there is no
+    /// head pose for the hold to run on.
+    func acceptRecenter(head: simd_float4x4?) {
+        guard phase == .recentring else { return }
+        lockRecenter(head.map(HeadAnchor.init(head:)))
+    }
+
+    private func lockRecenter(_ anchor: HeadAnchor?) {
+        recenterAnchor = anchor
+        recenterProgress = 1
+        phase = .recentred
     }
 
     private func startArm() {
@@ -267,7 +358,9 @@ final class CalibrationManager {
             arms: arms,
             safetyScale: safetyScale,
             peakSpeed: robustPeakSpeed(),
-            createdAt: Date()
+            createdAt: Date(),
+            anchor: captureAnchor,
+            lastUsedAt: nil
         )
         phase = .finished
         confirmCircle = nil

@@ -35,6 +35,8 @@ struct ContentView: View {
                 SongSelectionView(showSettings: $showSettings)
             case .calibration:
                 CalibrationScreen()
+            case .recenter:
+                RecenterScreen()
             case .statistics:
                 StatisticsView()
             case .countdown:
