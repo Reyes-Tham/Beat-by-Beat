@@ -249,7 +249,10 @@ struct ImmersiveView: View {
         field.outlineIsVisible = false
         calibration.begin(
             hand: appModel.trainingHand,
-            anchor: handTracking.deviceTransform().map(HeadAnchor.init(head:))
+            // A closure rather than `map(HeadAnchor.init(head:))`: passing the
+            // initialiser as a value hands it to a nonisolated `map`, and it is
+            // main-actor isolated.
+            anchor: handTracking.deviceTransform().map { HeadAnchor(head: $0) }
         )
         lastCalibrationTick = CACurrentMediaTime()
         buildReachPreview()

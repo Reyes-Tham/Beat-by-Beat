@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Beat By Beat listens in the menus for the words "calibrate" and "recenter", so you can set up a session without reaching for a button.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech is recognised on this device, and only to pick out the words "calibrate" and "recenter". Nothing that is said is sent anywhere.</string>
 	<key>NSHandsTrackingUsageDescription</key>
 	<string>Beat By Beat tracks your hand position so you can reach out and touch targets in time with the music.</string>
 	<key>UIApplicationSceneManifest</key>
