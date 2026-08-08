@@ -81,57 +81,74 @@ struct ContentView: View {
     @ViewBuilder
     private var calibrationFlow: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Calibrating — \(appModel.calibrationProgress)")
+            Text("Calibrating — \(appModel.calibrationHandProgress)")
                 .font(.title3)
 
-            Text("\(appModel.calibrationStepName) arm")
-                .font(.headline)
-
-            Text("Reach out as far as is comfortable — up, down, left, right "
-                 + "and forward. Take your time. Nothing to touch.")
-                .foregroundStyle(.secondary)
-
-            if appModel.calibrationAwaitingHand {
-                Label("Looking for your hand — move it into view.",
-                      systemImage: "hand.raised")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+            if appModel.calibrationIsConfirming {
+                confirmStep
             } else {
-                let span = appModel.calibrationSpan
-                Text(String(format: "Captured so far: %.0f × %.0f × %.0f cm",
+                captureStep
+            }
+
+            let span = appModel.calibrationSpan
+            if span != .zero {
+                Text(String(format: "This arm so far: %.0f × %.0f × %.0f cm",
                             span.x * 100, span.y * 100, span.z * 100))
-                    .font(.callout)
+                    .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("When you're done, rest your arm and glance at the circle "
-                     + "for 3 seconds.")
-                    .font(.callout)
-
-                ProgressView(value: Double(appModel.calibrationDwell))
-                    .tint(.green)
-
-                if !appModel.calibrationCanConfirm {
-                    Text("Move your arm around a little more first.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if !appModel.calibrationHandSteady {
-                    Text("Rest your arm — it still needs to come to a stop.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                // visionOS keeps eye gaze private, so this tracks head
-                // direction. Say so rather than implying eye tracking.
-                Text("Uses head direction — visionOS doesn't share eye gaze "
-                     + "with apps.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
         }
+    }
+
+    @ViewBuilder
+    private var captureStep: some View {
+        Text(appModel.calibrationProgress)
+            .font(.headline)
+
+        Text(appModel.calibrationInstruction)
+            .foregroundStyle(.secondary)
+
+        if appModel.calibrationAwaitingHand {
+            Label("Looking for your hand — move it into view.",
+                  systemImage: "hand.raised")
+                .font(.callout)
+                .foregroundStyle(.orange)
+        } else {
+            // Each direction ends itself when the arm stops, so the patient
+            // never has to press anything mid-reach.
+            ProgressView(value: Double(appModel.calibrationHold))
+                .tint(.blue)
+            Text(appModel.calibrationCanConfirm
+                 ? "Hold it there for a moment."
+                 : "Go only as far as is comfortable.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var confirmStep: some View {
+        Text("All six directions captured")
+            .font(.headline)
+
+        Text("Rest your arm and glance at the circle for 3 seconds to lock "
+             + "this arm in.")
+            .foregroundStyle(.secondary)
+
+        ProgressView(value: Double(appModel.calibrationDwell))
+            .tint(.green)
+
+        if !appModel.calibrationHandSteady {
+            Text("Rest your arm — it still needs to come to a stop.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        // visionOS keeps eye gaze private, so this tracks head direction. Say
+        // so rather than implying eye tracking.
+        Text("Uses head direction — visionOS doesn't share eye gaze with apps.")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 
     @ViewBuilder
@@ -208,12 +225,16 @@ struct ContentView: View {
     private var actionBar: some View {
         if appModel.isCalibrating {
             HStack(spacing: 12) {
-                Button("Lock this arm") { appModel.advanceCalibration() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!appModel.calibrationCanConfirm)
+                Button(appModel.calibrationIsConfirming ? "Lock this arm" : "Accept") {
+                    appModel.advanceCalibration()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!appModel.calibrationIsConfirming && !appModel.calibrationCanConfirm)
                 Button("Cancel") { appModel.cancelCalibration() }
                 Spacer()
-                Text("or rest your arm and glance at the circle")
+                Text(appModel.calibrationIsConfirming
+                     ? "or glance at the circle"
+                     : "or just hold still")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

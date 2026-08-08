@@ -67,7 +67,7 @@ struct ImmersiveView: View {
         .onChange(of: appModel.isPlaying) { startOrStop() }
         .onChange(of: appModel.calibrationRequests) { beginCalibration() }
         .onChange(of: appModel.calibrationCancelRequests) { cancelCalibration() }
-        .onChange(of: appModel.calibrationAdvanceRequests) { calibration.confirmNow() }
+        .onChange(of: appModel.calibrationAdvanceRequests) { calibration.acceptNow() }
         .onChange(of: appModel.useCalibration) { configure() }
         .onChange(of: appModel.simulateHandWithMouse) {
             appModel.simulatedPalmUnit = nil
@@ -97,7 +97,7 @@ struct ImmersiveView: View {
     private func tick() {
         guard let field else { return }
 
-        if calibration.phase == .capturing {
+        if calibration.phase == .capturing || calibration.phase == .confirming {
             tickCalibration()
             return
         }
@@ -155,7 +155,7 @@ struct ImmersiveView: View {
         // than the 42° an earlier version needed, so confirming is a glance
         // and not a neck movement. What keeps that safe is the stillness gate
         // in updateDwell, not distance from where they're looking.
-        if calibration.confirmCircle == nil, let head {
+        if calibration.phase == .confirming, calibration.confirmCircle == nil, let head {
             let position = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
             var forward = -SIMD3<Float>(head.columns.2.x, head.columns.2.y, head.columns.2.z)
             forward.y = 0
@@ -169,7 +169,7 @@ struct ImmersiveView: View {
                 ? appModel.simulatedPalmUnit.map { appModel.manualVolume.point(at: $0) }
                 : nil)
 
-        calibration.record(palm: palm)
+        calibration.record(palm: palm, deltaTime: dt)
         calibration.updateDwell(isLooking: isLookingAtConfirmCircle(head: head), deltaTime: dt)
 
         updateProxyMarkers()
@@ -183,8 +183,10 @@ struct ImmersiveView: View {
             appModel.useCalibration = true
             clearCalibrationScene()
             configure()
-        } else if calibration.confirmCircle == nil || confirmRoot.children.isEmpty {
-            showConfirmCircle()
+        } else if calibration.phase == .capturing, !confirmRoot.children.isEmpty {
+            // Circle belongs to the confirm step only; clear it when the next
+            // arm starts its six directions.
+            for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
         }
 
         publishCalibrationState()
@@ -240,14 +242,19 @@ struct ImmersiveView: View {
 
     private func publishCalibrationState() {
         appModel.isCalibrating = calibration.phase == .capturing
-        appModel.calibrationStepName = calibration.handName
+            || calibration.phase == .confirming
+        appModel.calibrationIsConfirming = calibration.phase == .confirming
+        appModel.calibrationInstruction = calibration.instruction
+        appModel.calibrationHold = calibration.holdProgress
+        appModel.calibrationPointsCaptured = calibration.capturedPointCount
+        appModel.calibrationHandProgress = calibration.handProgress
+        appModel.calibrationStepName = calibration.currentAxis.shortName
         appModel.calibrationProgress = calibration.progress
         appModel.calibrationAwaitingHand = calibration.awaitingHand
         appModel.calibrationDwell = calibration.dwellProgress
-        appModel.calibrationCanConfirm = calibration.canConfirm
+        appModel.calibrationCanConfirm = calibration.hasMoved
         appModel.calibrationHandSteady = calibration.isHandSteady
-        let span = calibration.currentSpan
-        appModel.calibrationSpan = span
+        appModel.calibrationSpan = calibration.currentBox?.size ?? .zero
     }
 
     // MARK: - Transport
@@ -287,6 +294,7 @@ struct ImmersiveView: View {
         guard let field = target ?? field else { return }
         field.mode = appModel.mode
         field.volume = appModel.volume
+        field.volumeForHand = { appModel.volume(for: $0) }
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount

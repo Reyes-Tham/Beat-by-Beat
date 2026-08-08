@@ -37,7 +37,10 @@ final class TargetField {
     private let respawnDelay: Duration = .milliseconds(250)
 
     var mode: FieldMode = .practice
+    /// Union of both arms — used for the outline and for practice layout.
     var volume: SpawnVolume = .fixed
+    /// Per-arm boundary. Each arm's targets are placed in its own box.
+    var volumeForHand: ((TrainingHand) -> SpawnVolume)?
     var layout: TargetLayout = .grid
     var hand: TrainingHand = .both
     var targetCount: Int = 3
@@ -157,8 +160,9 @@ final class TargetField {
     // MARK: - Rhythm spawning
 
     func spawn(note: ChartNote, index: Int) {
+        let box = volumeForHand?(note.hand) ?? volume
         spawn(
-            at: volume.point(at: note.unit),
+            at: box.point(at: note.unit),
             hand: note.hand,
             noteIndex: index,
             beatTime: note.time,

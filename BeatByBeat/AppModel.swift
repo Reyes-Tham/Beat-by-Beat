@@ -117,9 +117,30 @@ class AppModel {
 
     var isUsingCalibration: Bool { useCalibration && calibration != nil }
 
-    /// What gameplay actually uses.
+    /// What gameplay uses for a given arm.
+    ///
+    /// Per-arm because hemiparesis is asymmetric: the affected arm's workspace
+    /// can be a fraction of the other's, and one shared box would put targets
+    /// out of reach on one side and make them trivial on the other.
+    func volume(for hand: TrainingHand) -> SpawnVolume {
+        guard isUsingCalibration,
+              let calibrated = calibration?.volume(for: hand)
+        else { return manualVolume }
+        return calibrated
+    }
+
+    /// Union of both arms, for the outline and for anything that needs one box.
     var volume: SpawnVolume {
-        isUsingCalibration ? calibration!.volume : manualVolume
+        guard isUsingCalibration, let calibration else { return manualVolume }
+        let boxes = [TrainingHand.left, .right].compactMap { calibration.volume(for: $0) }
+        guard let first = boxes.first else { return manualVolume }
+        var lo = first.minBound
+        var hi = first.maxBound
+        for box in boxes.dropFirst() {
+            lo = simd_min(lo, box.minBound)
+            hi = simd_max(hi, box.maxBound)
+        }
+        return SpawnVolume(center: (lo + hi) / 2, size: hi - lo)
     }
 
     // MARK: - Live readouts
@@ -152,6 +173,12 @@ class AppModel {
     var calibrationCanConfirm = false
     /// Whether the arm has stopped moving — the second gate on confirming.
     var calibrationHandSteady = false
+    /// True once six points are captured and the confirm glance is pending.
+    var calibrationIsConfirming = false
+    /// 0...1 while the arm is held still on the current direction.
+    var calibrationHold: Float = 0
+    var calibrationPointsCaptured = 0
+    var calibrationHandProgress = ""
     /// Reach captured so far for the current arm, in metres.
     var calibrationSpan: SIMD3<Float> = .zero
     private(set) var calibrationRequests = 0

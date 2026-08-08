@@ -72,11 +72,17 @@ struct SettingsView: View {
             if let profile = appModel.calibration {
                 Toggle("Use calibrated workspace", isOn: $appModel.useCalibration)
 
-                let size = profile.volume.size
-                LabeledContent("Playable") {
-                    Text(String(format: "%.0f × %.0f × %.0f cm",
-                                size.x * 100, size.y * 100, size.z * 100))
-                        .monospacedDigit()
+                // One row per arm: the two boundaries are separate, and seeing
+                // how far apart they are is the point of measuring them apart.
+                ForEach(profile.arms.keys.sorted(), id: \.self) { key in
+                    if let hand = TrainingHand(rawValue: key),
+                       let size = profile.volume(for: hand)?.size {
+                        LabeledContent("\(hand.displayName) arm") {
+                            Text(String(format: "%.0f × %.0f × %.0f cm",
+                                        size.x * 100, size.y * 100, size.z * 100))
+                                .monospacedDigit()
+                        }
+                    }
                 }
                 LabeledContent("Safety scale") {
                     Text(String(format: "%.0f%% of reached", profile.safetyScale * 100))
