@@ -243,17 +243,46 @@ class AppModel {
         didSet { calibration?.save() }
     }
 
-    /// Prefer the measured boundary over the hand-set one. Turning it off lets
-    /// a nurse work from the sliders without discarding the capture.
-    var useCalibration = true
+    /// Where the patient was sitting when the workspace now in use was set.
+    ///
+    /// Kept beside the sliders rather than inside the profile, because the
+    /// sliders are what the game reads. A box nudged by hand should still be
+    /// recentrable afterwards, and there may be no capture at all.
+    var workspaceAnchor: HeadAnchor? = HeadAnchor.loadWorkspace() {
+        didSet { HeadAnchor.saveWorkspace(workspaceAnchor) }
+    }
 
-    var isUsingCalibration: Bool { useCalibration && calibration != nil }
+    /// Moves the workspace onto where the patient is sitting now.
+    ///
+    /// Shifts the boxes the game reads, and the stored profile with them so its
+    /// record goes on describing the same reach. Reports whether anything
+    /// actually moved: with no anchor to measure from, a first recentre can
+    /// only adopt the position.
+    @discardableResult
+    func recentreWorkspace(to anchor: HeadAnchor) -> Bool {
+        defer { workspaceAnchor = anchor }
+        guard let old = workspaceAnchor else { return false }
+
+        let shift = anchor.position - old.position
+        guard length(shift) > 0.005 else { return false }
+
+        var moved = manualWorkspaces
+        for hand in [TrainingHand.left, .right] {
+            var workspace = manualWorkspace(for: hand)
+            workspace.center += shift
+            moved[hand.rawValue] = workspace
+        }
+        manualWorkspaces = moved
+        calibration = calibration?.recentred(to: anchor)
+        return true
+    }
 
     /// Copies measured boundaries into the sliders.
     ///
-    /// Run automatically when a capture finishes, so the manual controls start
-    /// from the patient's real numbers rather than from defaults — which is
-    /// what makes adjusting one afterwards a nudge instead of a fresh capture.
+    /// Run whenever a capture finishes: a measurement is the better number, so
+    /// it takes over from whatever was there. It also leaves the sliders
+    /// holding the patient's real reach, which makes a later adjustment a nudge
+    /// rather than another capture.
     func seedManualFromCalibration() {
         guard let calibration else { return }
         for hand in [TrainingHand.left, .right] {
@@ -262,16 +291,14 @@ class AppModel {
         }
     }
 
-    /// What gameplay uses for a given arm.
+    /// What gameplay uses for a given arm: the sliders, always.
     ///
-    /// Measured first, hand-set as the fallback. There is always a workspace,
-    /// which is what lets calibration be skipped and the app still be played —
-    /// on a headset or, with the simulated hand, without one.
+    /// One box, not two. A capture writes its result into the sliders instead
+    /// of sitting beside them as a rival source, so what a therapist reads in
+    /// Settings is always where targets are going. Two sources meant a slider
+    /// could be moved with no effect and nothing on screen saying why.
     func volume(for hand: TrainingHand) -> SpawnVolume {
-        if isUsingCalibration, let calibrated = calibration?.volume(for: hand) {
-            return calibrated
-        }
-        return manualWorkspace(for: hand).volume
+        manualWorkspace(for: hand).volume
     }
 
     /// Union of both arms, for the outline and for practice layout.

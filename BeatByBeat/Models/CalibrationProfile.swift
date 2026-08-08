@@ -101,6 +101,22 @@ struct HeadAnchor: Codable, Equatable {
         abs(atan2(sin(yaw - other.yaw), cos(yaw - other.yaw)))
     }
 
+    // MARK: - Persistence
+
+    private static let storageKey = "workspaceAnchor"
+
+    static func loadWorkspace() -> HeadAnchor? {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return nil }
+        return try? JSONDecoder().decode(HeadAnchor.self, from: data)
+    }
+
+    static func saveWorkspace(_ anchor: HeadAnchor?) {
+        guard let anchor, let data = try? JSONEncoder().encode(anchor) else {
+            return UserDefaults.standard.removeObject(forKey: storageKey)
+        }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
+
     /// Whether the head has stayed put, for the hold that locks a recentre in.
     func isClose(to other: HeadAnchor, within metres: Float, radians: Float) -> Bool {
         distance(position, other.position) <= metres && facingChange(from: other) <= radians

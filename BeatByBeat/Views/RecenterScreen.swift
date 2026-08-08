@@ -139,6 +139,19 @@ struct RecenterScreen: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
+        // A workspace with no recorded seat has nothing to be moved *from*, so
+        // the first recentre can only note where they are. Saying so beats
+        // pressing Start and watching nothing happen — which is exactly how
+        // this looked when captures were failing to record a seat at all.
+        if appModel.workspaceAnchor == nil {
+            Label("This is the first one, so it notes where you're sitting. From "
+                  + "the next one on, the workspace moves onto wherever you are.",
+                  systemImage: "info.circle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
         // Moving the box handles a different chair; it cannot handle facing a
         // different way, because the workspace is square to the room. Saying so
         // is the difference between a patient reaching sideways all session and

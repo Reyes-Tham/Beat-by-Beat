@@ -90,16 +90,16 @@ struct SettingsView: View {
         let workspace = appModel.manualWorkspace(for: editingArm)
 
         section("Manual workspace") {
-            if appModel.isUsingCalibration {
-                Text("A measured calibration is in use. These sliders drive the "
-                     + "game when \"Use measured calibration\" is switched off.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("These sliders are driving the game.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            // One source, stated plainly. There used to be a switch choosing
+            // between these sliders and the measured box, which meant a slider
+            // could be dragged with no effect and nothing saying why.
+            Text(appModel.calibration == nil
+                 ? "These sliders are where targets go."
+                 : "These sliders are where targets go. Your last capture wrote "
+                   + "them, and the next one will overwrite them again.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Picker("Arm", selection: $editingArm) {
                 Text("Left").tag(TrainingHand.left)
@@ -229,10 +229,11 @@ struct SettingsView: View {
 
         section("Calibration") {
             if let profile = appModel.calibration {
-                Toggle("Use measured calibration", isOn: $appModel.useCalibration)
-                Text("On, the measured boundary wins. Off, the sliders below do.")
+                Text("What the last capture measured. Recording one writes these "
+                     + "numbers into the workspace sliders.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // One row per arm: the two boundaries are separate, and seeing
                 // how far apart they are is the point of measuring them apart.

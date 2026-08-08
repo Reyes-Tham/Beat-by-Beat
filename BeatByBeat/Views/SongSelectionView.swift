@@ -92,7 +92,7 @@ struct SongSelectionView: View {
 
                 Text(workspaceSource)
                     .font(.caption)
-                    .foregroundStyle(appModel.isUsingCalibration ? Color.secondary : Color.orange)
+                    .foregroundStyle(appModel.calibration == nil ? Color.orange : Color.secondary)
             }
             .padding(.vertical, 18)
         }
@@ -103,14 +103,12 @@ struct SongSelectionView: View {
         .onChange(of: selectedIndex) { appModel.selectedSong = song }
     }
 
-    /// Says which boundary targets will be placed in, since "measured" and
-    /// "set by hand" play very differently and the difference is invisible
-    /// once the song starts.
+    /// Says where the workspace came from. Measured and set-by-hand play very
+    /// differently, and the difference is invisible once the song starts.
     private var workspaceSource: String {
-        guard appModel.isUsingCalibration else {
-            return "Using the manual workspace — set it in Settings, or calibrate for a measured one."
-        }
-        return "Using your measured reach."
+        appModel.calibration == nil
+            ? "Targets use the workspace set in Settings — calibrate to measure it instead."
+            : "Using your measured reach. Settings can nudge it."
     }
 
     // MARK: - Header

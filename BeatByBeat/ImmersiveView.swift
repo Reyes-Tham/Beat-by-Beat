@@ -32,7 +32,6 @@ struct ImmersiveView: View {
     /// down — so the field settings live on their own.
     var body: some View {
         scene
-            .onChange(of: appModel.useCalibration) { configure() }
             .onChange(of: appModel.simulateHandWithMouse) {
                 appModel.simulatedPalmUnit = nil
                 updateProxyMarkers()
@@ -290,11 +289,12 @@ struct ImmersiveView: View {
     private func applyRecenterIfDone() {
         guard calibration.phase == .recentred else { return }
 
-        if let anchor = calibration.recenterAnchor, let saved = appModel.calibration {
-            appModel.calibration = saved.recentred(to: anchor)
-            appModel.seedManualFromCalibration()
+        // Shifts the sliders, not the profile alone: the sliders are what
+        // gameplay reads, and reseeding them from the profile instead would
+        // throw away any nudge a nurse had made since the capture.
+        if let anchor = calibration.recenterAnchor {
+            appModel.recentreWorkspace(to: anchor)
         }
-        appModel.useCalibration = appModel.calibration != nil
 
         calibration.cancel()
         clearCalibrationScene()
@@ -316,6 +316,7 @@ struct ImmersiveView: View {
         lastCalibrationTick = now
 
         let head = handTracking.deviceTransform()
+        calibration.noteHead(head.map { HeadAnchor(head: $0) })
 
         // Pinned once per arm, just below eye line — about 18° down rather
         // than the 42° an earlier version needed, so confirming is a glance
@@ -366,10 +367,14 @@ struct ImmersiveView: View {
         guard calibration.phase == .finished, let profile = calibration.profile else { return }
 
         appModel.calibration = profile
-        appModel.useCalibration = true
-        // Sliders now show the patient's real numbers, so a later adjustment is
-        // a nudge rather than another capture.
+        // A measurement beats whatever was in the sliders, so it takes them
+        // over. They are what the game reads, so this is the moment the capture
+        // becomes the workspace rather than a second opinion beside it.
         appModel.seedManualFromCalibration()
+        // Recorded from the same capture, so a later recentre knows where this
+        // workspace was set from.
+        appModel.workspaceAnchor = profile.anchor ?? handTracking.deviceTransform()
+            .map { HeadAnchor(head: $0) }
         // Kept as history: a workspace is far more informative compared against
         // what it was than read on its own.
         PatientStore.addCalibration(profile)

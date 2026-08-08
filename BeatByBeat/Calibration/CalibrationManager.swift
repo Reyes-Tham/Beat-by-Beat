@@ -124,9 +124,9 @@ final class CalibrationManager {
     func begin(hand: TrainingHand, anchor: HeadAnchor?, safetyScale: Float = 0.85) {
         self.safetyScale = safetyScale
         self.sessionHand = hand
-        // Taken at the start rather than the end: this is where the patient was
-        // sitting when they reached, and by the last direction they may be
-        // leaning after a target.
+        // Wanted from the start rather than the end: this is where the patient
+        // was sitting when they reached, and by the last direction they may be
+        // leaning after a target. Often nil here all the same — see `noteHead`.
         self.captureAnchor = anchor
         var order: [TrainingHand] = hand == .both ? [.left, .right] : [hand]
         totalHands = order.count
@@ -271,6 +271,20 @@ final class CalibrationManager {
             steadyFor = 0
             holdProgress = 0
         }
+    }
+
+    /// Offers a head pose for the capture's anchor, which is kept only if
+    /// there isn't one yet.
+    ///
+    /// Fed every frame because asking once, at `begin`, reliably got nothing. A
+    /// capture at launch opens while world tracking is still starting up, so
+    /// the one sample taken then was always nil — and a profile with no anchor
+    /// silently cannot be recentred afterwards, which is the entire reason for
+    /// keeping one. The first frame that has a pose is still the patient at the
+    /// start of their first reach.
+    func noteHead(_ anchor: HeadAnchor?) {
+        guard captureAnchor == nil, let anchor else { return }
+        captureAnchor = anchor
     }
 
     /// Start the current arm's six directions over.
