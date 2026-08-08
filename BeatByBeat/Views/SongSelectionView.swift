@@ -44,16 +44,14 @@ struct SongSelectionView: View {
 
             Divider()
 
-            // Three columns rather than one tall one. Everything is visible at
-            // once, which is the point: a therapist mid-session should not have
-            // to scroll or resize a window to see what a run is set to.
-            HStack(alignment: .top, spacing: 26) {
+            // Two sections: the songs, and everything about the run. Splitting
+            // the settings across two columns of their own read as three
+            // unrelated panels rather than one choice and its options.
+            HStack(alignment: .top, spacing: 28) {
                 songList
-                    .frame(width: 290)
-                detailsLeft
-                    .frame(width: 330)
-                detailsRight
-                    .frame(width: 330)
+                    .frame(width: 280)
+                runSettings
+                    .frame(width: 760)
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 22)
@@ -96,7 +94,7 @@ struct SongSelectionView: View {
             }
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 1090, minHeight: 480)
+        .frame(minWidth: 1130, minHeight: 480)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
@@ -209,194 +207,204 @@ struct SongSelectionView: View {
 
     // MARK: - Right column
 
-    private var detailsLeft: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Past Score")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
-
-                if let best = appModel.bestScore {
-                    VStack(spacing: 2) {
-                        Text("\(best.points)")
-                            .font(.title)
-                            .monospacedDigit()
-                        Text("\(best.reached) targets reached · \(best.rhythmPercent)% on beat")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    Text("No runs yet at \(appModel.level.displayName)")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(song.title)
-                    .font(.title2)
-                Label(song.durationText, systemImage: "clock")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                Text("Movements needed")
-                    .font(.headline)
-                    .padding(.top, 4)
-                Text(song.movementFocus)
-                    .foregroundStyle(.secondary)
-                Text(appModel.level.focus)
-                    .foregroundStyle(.secondary)
-
-                if !song.hasAudio {
-                    Label("No audio for this track — plays to a generated beat grid.",
-                          systemImage: "speaker.slash")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 4)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(RoundedRectangle(cornerRadius: 16).fill(.thinMaterial))
-
+    /// Everything about the run, in one panel.
+    ///
+    /// Laid out across the width rather than down: the movement and
+    /// orientation choices are short and sit far better in a row than as a
+    /// stack that pushes the buttons off the bottom.
+    private var runSettings: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            pastScore
+            songInfo
             arms
-            Spacer(minLength: 0)
-        }
-    }
-
-    private var detailsRight: some View {
-        VStack(alignment: .leading, spacing: 16) {
             mobility
             movements
-            Spacer(minLength: 0)
+            // Always present, so ticking Grip doesn't shift everything below
+            // it. Dimmed rather than blank: an empty gap says nothing about
+            // why it's there.
+            gripOrientations
+                .disabled(!appModel.enabledMovements.contains(.grip))
+                .opacity(appModel.enabledMovements.contains(.grip) ? 1 : 0.35)
         }
     }
 
-    /// Which arm the session trains. Belongs here rather than mid-game: it
-    /// decides which calibrated boundary the targets are placed in.
+    private var pastScore: some View {
+        VStack(spacing: 4) {
+            Text("Past Score")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
+
+            if let best = appModel.bestScore {
+                HStack(spacing: 10) {
+                    Text("\(best.points)")
+                        .font(.title2)
+                        .monospacedDigit()
+                    Text("\(best.reached) reached · \(best.rhythmPercent)% on beat")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                Text("No runs yet at \(appModel.level.displayName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var songInfo: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(song.title)
+                    .font(.title3)
+                Label(song.durationText, systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !song.hasAudio {
+                    Label("No audio — generated beat grid", systemImage: "speaker.slash")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .frame(width: 220, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Movements needed")
+                    .font(.subheadline)
+                Text(song.movementFocus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(appModel.level.focus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14).fill(.thinMaterial))
+    }
+
     private var arms: some View {
         @Bindable var appModel = appModel
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return HStack(spacing: 14) {
             Text("Arm")
                 .font(.headline)
-                .frame(maxWidth: .infinity)
+                .frame(width: 92, alignment: .leading)
             Picker("Arm", selection: $appModel.trainingHand) {
                 ForEach(TrainingHand.allCases, id: \.self) { hand in
                     Text(hand.displayName).tag(hand)
                 }
             }
             .pickerStyle(.segmented)
+            .frame(width: 250)
             Text(appModel.trainingHand == .both
-                 ? "Targets alternate; each arm uses its own measured range."
+                 ? "Targets alternate; each arm uses its own range."
                  : "Only the \(appModel.trainingHand.displayName.lowercased()) hand will score.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
     }
 
-    /// Movement selection. Checkboxes rather than a single level because these
-    /// train different things: someone can have a usable reach and no grasp,
-    /// or the reverse, and a therapist should be able to pick.
+    /// Movement choices, side by side.
+    ///
+    /// A row rather than a stack: three short options read fine across the
+    /// width, and stacking them pushed the buttons off the bottom of the panel.
     private var movements: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Movements")
                 .font(.headline)
-                .frame(maxWidth: .infinity)
-
-            ForEach(MovementType.allCases) { movement in
-                let isOn = appModel.enabledMovements.contains(movement)
-                Button {
-                    if isOn {
-                        appModel.enabledMovements.remove(movement)
-                    } else {
-                        appModel.enabledMovements.insert(movement)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: isOn ? "checkmark.square.fill" : "square")
-                            .font(.title3)
-                            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        Image(systemName: movement.symbol)
-                            .frame(width: 26)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(movement.displayName)
-                            Text(movement.detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                ForEach(MovementType.allCases) { movement in
+                    let isOn = appModel.enabledMovements.contains(movement)
+                    Button {
+                        if isOn {
+                            appModel.enabledMovements.remove(movement)
+                        } else {
+                            appModel.enabledMovements.insert(movement)
                         }
-                        Spacer()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(isOn ? AnyShapeStyle(.tint)
+                                                      : AnyShapeStyle(.secondary))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(movement.displayName)
+                                    .font(.callout)
+                                Text(movement.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                }
-                .buttonStyle(.plain)
-                .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
-                .hoverEffect()
-
-                // Nested under Grip, because an orientation with grip switched
-                // off would be a setting that does nothing.
-                if movement == .grip, isOn {
-                    gripOrientations
-                        .padding(.leading, 22)
+                    .buttonStyle(.plain)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
+                    .hoverEffect()
                 }
             }
         }
     }
 
-    /// Which hand orientations grip notes may ask for.
     private var gripOrientations: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Hand orientation")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-
-            ForEach(GripOrientation.allCases) { orientation in
-                let isOn = appModel.enabledGripOrientations.contains(orientation)
-                Button {
-                    if isOn {
-                        appModel.enabledGripOrientations.remove(orientation)
-                    } else {
-                        appModel.enabledGripOrientations.insert(orientation)
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(orientation.displayName)
-                                .font(.callout)
-                            Text(orientation.detail)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                ForEach(GripOrientation.allCases) { orientation in
+                    let isOn = appModel.enabledGripOrientations.contains(orientation)
+                    Button {
+                        if isOn {
+                            appModel.enabledGripOrientations.remove(orientation)
+                        } else {
+                            appModel.enabledGripOrientations.insert(orientation)
                         }
-                        Spacer()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(isOn ? AnyShapeStyle(.tint)
+                                                      : AnyShapeStyle(.secondary))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(orientation.displayName)
+                                    .font(.callout)
+                                Text(orientation.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
+                    .buttonStyle(.plain)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(.quaternary.opacity(0.5)))
+                    .hoverEffect()
                 }
-                .buttonStyle(.plain)
-                .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.5)))
-                .hoverEffect()
             }
         }
     }
 
-    /// Named for what it scales — how much of the workspace is used — rather
-    /// than as a difficulty rating. A patient is not failing at a harder level;
-    /// they are working in a larger space.
     private var mobility: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 14) {
             Text("Mobility")
                 .font(.headline)
+                .frame(width: 92, alignment: .leading)
 
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 ForEach(ReachLevel.allCases) { level in
                     Button {
                         appModel.level = level
@@ -406,7 +414,7 @@ struct SongSelectionView: View {
                                   ? AnyShapeStyle(.yellow)
                                   : AnyShapeStyle(.clear))
                             .overlay(Diamond().stroke(.white.opacity(0.8), lineWidth: 2))
-                            .frame(width: 42, height: 42)
+                            .frame(width: 36, height: 36)
                     }
                     .buttonStyle(.plain)
                     .hoverEffect()
@@ -415,11 +423,10 @@ struct SongSelectionView: View {
             }
 
             Text(appModel.level.summary)
-                .font(.callout)
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
     }
 }
 

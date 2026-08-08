@@ -25,7 +25,7 @@ struct BeatByBeatApp: App {
         // The window follows its content, and each screen states a size that
         // already fits everything it shows — so nothing has to be dragged open
         // to read it. Minimums stop "follows content" collapsing a screen.
-        .defaultSize(width: 1120, height: 640)
+        .defaultSize(width: 1160, height: 660)
         .windowResizability(.contentSize)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {
