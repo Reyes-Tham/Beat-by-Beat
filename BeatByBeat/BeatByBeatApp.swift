@@ -22,10 +22,10 @@ struct BeatByBeatApp: App {
                     .environment(appModel)
             }
         }
-        // Song selection and the game panel are very different sizes, so the
-        // window follows its content. Each screen carries its own minimum, so
-        // "follows content" can't collapse one to nothing.
-        .defaultSize(width: 880, height: 900)
+        // The window follows its content, and each screen states a size that
+        // already fits everything it shows — so nothing has to be dragged open
+        // to read it. Minimums stop "follows content" collapsing a screen.
+        .defaultSize(width: 1120, height: 640)
         .windowResizability(.contentSize)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {

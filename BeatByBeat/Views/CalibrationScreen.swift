@@ -77,7 +77,7 @@ struct CalibrationScreen: View {
             .padding(.horizontal, 36)
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 560, minHeight: 560)
+        .frame(minWidth: 620, minHeight: 640)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environment(appModel)

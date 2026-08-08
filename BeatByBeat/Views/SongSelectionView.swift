@@ -44,17 +44,19 @@ struct SongSelectionView: View {
 
             Divider()
 
-            // Scrolls: the right column carries arm, mobility and movements,
-            // which together are taller than a comfortable window.
-            ScrollView {
-                HStack(alignment: .top, spacing: 28) {
-                    songList
-                        .frame(width: 300)
-                    details
-                }
-                .padding(.horizontal, 36)
-                .padding(.vertical, 24)
+            // Three columns rather than one tall one. Everything is visible at
+            // once, which is the point: a therapist mid-session should not have
+            // to scroll or resize a window to see what a run is set to.
+            HStack(alignment: .top, spacing: 26) {
+                songList
+                    .frame(width: 290)
+                detailsLeft
+                    .frame(width: 330)
+                detailsRight
+                    .frame(width: 330)
             }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 22)
 
             Divider()
 
@@ -94,7 +96,7 @@ struct SongSelectionView: View {
             }
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 860, minHeight: 620)
+        .frame(minWidth: 1090, minHeight: 480)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
@@ -207,8 +209,8 @@ struct SongSelectionView: View {
 
     // MARK: - Right column
 
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 18) {
+    private var detailsLeft: some View {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Past Score")
                     .font(.headline)
@@ -263,8 +265,15 @@ struct SongSelectionView: View {
             .background(RoundedRectangle(cornerRadius: 16).fill(.thinMaterial))
 
             arms
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var detailsRight: some View {
+        VStack(alignment: .leading, spacing: 16) {
             mobility
             movements
+            Spacer(minLength: 0)
         }
     }
 

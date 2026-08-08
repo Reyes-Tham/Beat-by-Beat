@@ -19,16 +19,19 @@ struct SettingsView: View {
 
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    calibrationSection
+                HStack(alignment: .top, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        calibrationSection
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 380)
 
-                    Divider()
+                    VStack(alignment: .leading, spacing: 22) {
+                        manualSection
 
-                    manualSection
+                        Divider()
 
-                    Divider()
-
-                    section("Developer mode") {
+                        section("Developer mode") {
                         Toggle("Disco lights, double speed, dancing cats",
                                isOn: $appModel.developerMode)
                         Text("For showing the app off, not for a session. "
@@ -43,21 +46,25 @@ struct SettingsView: View {
                         }
                     }
 
-                    Divider()
+                        Divider()
 
-                    section("Debug") {
-                        Toggle("Show volume outline", isOn: $appModel.showOutline)
-                        Toggle("Show hand proxy", isOn: $appModel.showHandProxy)
-                        if AppModel.isSimulator {
-                            Toggle("Simulate hand with mouse",
-                                   isOn: $appModel.simulateHandWithMouse)
-                            Text("The drag pad appears in the main panel.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        section("Debug") {
+                            Toggle("Show volume outline", isOn: $appModel.showOutline)
+                            Toggle("Show hand proxy", isOn: $appModel.showHandProxy)
+                            if AppModel.isSimulator {
+                                Toggle("Simulate hand with mouse",
+                                       isOn: $appModel.simulateHandWithMouse)
+                                Text("The drag pad appears in the main panel.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+
+                        Spacer(minLength: 0)
                     }
+                    .frame(width: 380)
                 }
-                .padding(32)
+                .padding(30)
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -66,7 +73,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 520, height: 640)
+        .frame(width: 880, height: 720)
     }
 
     /// Per-arm box editor.
