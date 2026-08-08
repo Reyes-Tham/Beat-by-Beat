@@ -108,17 +108,18 @@ class AppModel {
     var chartIsAuthored = false
     var noteCount = 0
 
-    // MARK: - Metronome
+    // MARK: - Next target
     //
-    // Beat *events*, not a per-frame phase: publishing progress every frame
-    // would re-render the panel at 90Hz to move a bar.
+    // A deadline published once per target, not a per-frame countdown: the bar
+    // runs off its own clock so nothing here re-renders to move it.
 
-    /// Index of the beat currently sounding.
-    var currentBeat = 0
-    /// How long this beat lasts. Taken from the song's real grid where there is
-    /// one, so it follows the recording rather than a nominal tempo.
-    var beatDuration: TimeInterval = 0.5
-    var beatsPerBar = 4
+    /// Host-clock time the next sphere appears at.
+    var nextSpawnDeadline: TimeInterval = 0
+    /// Length of the current gap, so the bar knows what full means.
+    var nextSpawnInterval: TimeInterval = 0
+    /// Which arm the next sphere is for, and what it will ask of them.
+    var nextSpawnHand: TrainingHand?
+    var nextSpawnMovement: MovementType?
 
     // MARK: - Spawn tuning
     //

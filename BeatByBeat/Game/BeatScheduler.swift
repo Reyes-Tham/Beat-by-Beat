@@ -37,6 +37,13 @@ final class BeatScheduler {
 
     var noteCount: Int { chart?.notes.count ?? 0 }
 
+    /// The next note that hasn't spawned, and its index. Used to count down to
+    /// the next sphere rather than to the next beat.
+    var pending: (note: ChartNote, index: Int)? {
+        guard let chart, nextIndex < chart.notes.count else { return nil }
+        return (chart.notes[nextIndex], nextIndex)
+    }
+
     /// Notes whose approach should begin at or before `songTime`.
     ///
     /// A note spawns `travel` seconds *before* its beat — the spawn is the cue

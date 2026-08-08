@@ -44,10 +44,11 @@ struct GameView: View {
                     .foregroundStyle(.secondary)
             }
 
-            MetronomeBar(
-                beat: appModel.currentBeat,
-                beatDuration: appModel.beatDuration,
-                beatsPerBar: appModel.beatsPerBar,
+            NextTargetBar(
+                deadline: appModel.nextSpawnDeadline,
+                interval: appModel.nextSpawnInterval,
+                hand: appModel.nextSpawnHand,
+                movement: appModel.nextSpawnMovement,
                 isRunning: appModel.isPlaying
             )
 
