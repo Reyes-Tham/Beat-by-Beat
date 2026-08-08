@@ -22,15 +22,18 @@ struct ResultsView: View {
             Text("Congratulations!!")
                 .font(.system(size: 52, weight: .bold, design: .rounded))
 
-            Text("Your score is \(score.reached)")
+            Text("Your score is \(score.points)")
                 .font(.largeTitle)
+                .monospacedDigit()
 
             SmileyFace()
                 .frame(width: 190, height: 190)
                 .padding(.vertical, 6)
 
             VStack(spacing: 6) {
-                Text("\(score.reached) of \(score.total) targets reached")
+                // A count, never a fraction: the targets that got away are not
+                // the story worth telling a patient.
+                Text("\(score.reached) targets reached")
                     .font(.title3)
                     .monospacedDigit()
                 Text("\(score.rhythmPercent)% of those landed on the beat")
@@ -90,7 +93,7 @@ private struct SmileyFace: View {
 
 #Preview(windowStyle: .automatic) {
     ResultsView(
-        score: SessionScore(reached: 100, total: 110, excellent: 40, good: 35, date: Date())
+        score: SessionScore(points: 1450, reached: 22, excellent: 8, good: 9, date: Date())
     ) {}
     .frame(width: 620, height: 640)
 }

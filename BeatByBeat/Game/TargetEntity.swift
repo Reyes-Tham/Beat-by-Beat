@@ -75,6 +75,10 @@ enum TargetEntity {
             )
             ring.name = "GripRing"
             root.addChild(ring)
+
+            if let icon = makeGripIcon(radius: radius) {
+                root.addChild(icon)
+            }
         }
 
         root.components.set(TargetComponent(
@@ -144,6 +148,83 @@ enum TargetEntity {
             guard let node = entity.findEntity(named: "Way\(index)") else { continue }
             let opacity: Float = index < nextIndex ? 0.12 : (index == nextIndex ? 1 : 0.28)
             node.components.set(OpacityComponent(opacity: opacity))
+        }
+    }
+
+    /// Fist badge sitting on top of the sphere, so a grip note is identifiable
+    /// before the hand gets there rather than only once it fails to score.
+    ///
+    /// Uses a bundled `grip_icon` image when one is present and falls back to a
+    /// drawn glyph otherwise — drop a PNG in Resources to replace the artwork
+    /// without touching this code.
+    static func makeGripIcon(radius: Float) -> Entity? {
+        guard let texture = gripTexture else { return nil }
+
+        var material = UnlitMaterial()
+        material.color = .init(tint: .white, texture: .init(texture))
+        material.blending = .transparent(opacity: 1.0)
+        material.opacityThreshold = 0.02
+
+        let size = radius * 1.5
+        let plane = ModelEntity(mesh: .generatePlane(width: size, height: size), materials: [material])
+        let root = Entity()
+        root.name = "GripIcon"
+        root.position = [0, radius * 1.85, 0]
+        root.addChild(plane)
+        root.components.set(BillboardComponent())
+        return root
+    }
+
+    /// Built once on first use. `TextureResource(named:)` is async in current
+    /// RealityKit, so the bundled-asset path is loaded separately by the view
+    /// and handed here; this fallback stays synchronous.
+    nonisolated(unsafe) static var gripTextureOverride: TextureResource?
+
+    private static var gripTexture: TextureResource? {
+        if let gripTextureOverride { return gripTextureOverride }
+        if cachedFist == nil, let image = drawFist().cgImage {
+            cachedFist = try? TextureResource(image: image, options: .init(semantic: .color))
+        }
+        return cachedFist
+    }
+
+    nonisolated(unsafe) private static var cachedFist: TextureResource?
+
+    /// Outline fist, drawn to match the usual grip pictogram: a block of four
+    /// finger segments with the thumb folded across them.
+    private static func drawFist(side: CGFloat = 256) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let c = ctx.cgContext
+            c.setStrokeColor(UIColor.white.cgColor)
+            c.setLineWidth(side * 0.055)
+            c.setLineCap(.round)
+            c.setLineJoin(.round)
+
+            let u = side / 100  // work in a 100×100 grid
+
+            // Palm / fist body.
+            c.addPath(UIBezierPath(
+                roundedRect: CGRect(x: 16 * u, y: 40 * u, width: 56 * u, height: 46 * u),
+                cornerRadius: 12 * u
+            ).cgPath)
+
+            // Four finger segments folded over the top.
+            for index in 0..<4 {
+                let x = 30 * u + CGFloat(index) * 12 * u
+                c.addPath(UIBezierPath(
+                    roundedRect: CGRect(x: x, y: (14 + CGFloat(index) * 3) * u,
+                                        width: 11 * u, height: (30 - CGFloat(index) * 2) * u),
+                    cornerRadius: 5.5 * u
+                ).cgPath)
+            }
+
+            // Thumb across the front.
+            c.addPath(UIBezierPath(
+                roundedRect: CGRect(x: 22 * u, y: 52 * u, width: 34 * u, height: 12 * u),
+                cornerRadius: 6 * u
+            ).cgPath)
+
+            c.strokePath()
         }
     }
 

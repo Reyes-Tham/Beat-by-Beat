@@ -27,6 +27,7 @@ struct Diamond: Shape {
 /// direct reach instead: the affected arm shouldn't have to pinch.
 struct SongSelectionView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Binding var showSettings: Bool
 
     @State private var selectedIndex = 0
@@ -43,26 +44,54 @@ struct SongSelectionView: View {
 
             Divider()
 
-            HStack(alignment: .top, spacing: 28) {
-                songList
-                    .frame(width: 300)
-                details
+            // Scrolls: the right column carries arm, mobility and movements,
+            // which together are taller than a comfortable window.
+            ScrollView {
+                HStack(alignment: .top, spacing: 28) {
+                    songList
+                        .frame(width: 300)
+                    details
+                }
+                .padding(.horizontal, 36)
+                .padding(.vertical, 24)
             }
-            .padding(.horizontal, 36)
-            .padding(.vertical, 24)
 
             Divider()
 
             HStack {
                 Spacer()
-                Button {
-                    appModel.selectedSong = song
-                    appModel.startGame()
-                } label: {
-                    Label("Play", systemImage: "play.fill")
-                        .frame(minWidth: 130)
+                if appModel.calibration == nil {
+                    // Calibration gates play rather than sitting in settings.
+                    // Without it every target would be placed against a guessed
+                    // workspace, which is the one thing this app exists not to do.
+                    VStack(spacing: 6) {
+                        Button {
+                            appModel.startCalibration()
+                        } label: {
+                            Label("Calibrate to begin", systemImage: "figure.arms.open")
+                                .frame(minWidth: 200)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Text("Takes about a minute. Targets are placed inside your own reach.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button {
+                        appModel.selectedSong = song
+                        Task {
+                            if appModel.immersiveSpaceState == .closed {
+                                appModel.immersiveSpaceState = .inTransition
+                                _ = await openImmersiveSpace(id: appModel.immersiveSpaceID)
+                            }
+                            appModel.startGame()
+                        }
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .frame(minWidth: 130)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
                 Spacer()
             }
             .padding(.vertical, 18)
@@ -180,10 +209,16 @@ struct SongSelectionView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
 
                 if let best = appModel.bestScore {
-                    Text("\(best.reached) / \(best.total) reached · \(best.rhythmPercent)% on beat")
-                        .font(.title3)
-                        .monospacedDigit()
-                        .frame(maxWidth: .infinity)
+                    VStack(spacing: 2) {
+                        Text("\(best.points)")
+                            .font(.title)
+                            .monospacedDigit()
+                        Text("\(best.reached) targets reached · \(best.rhythmPercent)% on beat")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    .frame(maxWidth: .infinity)
                 } else {
                     Text("No runs yet at \(appModel.level.displayName)")
                         .font(.callout)
@@ -219,8 +254,33 @@ struct SongSelectionView: View {
             .padding(18)
             .background(RoundedRectangle(cornerRadius: 16).fill(.thinMaterial))
 
-            difficulty
+            arms
+            mobility
             movements
+        }
+    }
+
+    /// Which arm the session trains. Belongs here rather than mid-game: it
+    /// decides which calibrated boundary the targets are placed in.
+    private var arms: some View {
+        @Bindable var appModel = appModel
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Arm")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+            Picker("Arm", selection: $appModel.trainingHand) {
+                ForEach(TrainingHand.allCases, id: \.self) { hand in
+                    Text(hand.displayName).tag(hand)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text(appModel.trainingHand == .both
+                 ? "Targets alternate; each arm uses its own measured range."
+                 : "Only the \(appModel.trainingHand.displayName.lowercased()) hand will score.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -266,9 +326,12 @@ struct SongSelectionView: View {
         }
     }
 
-    private var difficulty: some View {
+    /// Named for what it scales — how much of the workspace is used — rather
+    /// than as a difficulty rating. A patient is not failing at a harder level;
+    /// they are working in a larger space.
+    private var mobility: some View {
         VStack(spacing: 10) {
-            Text("Difficulty")
+            Text("Mobility")
                 .font(.headline)
 
             HStack(spacing: 14) {

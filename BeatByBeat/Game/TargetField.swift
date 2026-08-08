@@ -252,9 +252,12 @@ final class TargetField {
                 }
 
             case .grip:
-                // Arriving isn't enough — the hand has to close on it. That's
-                // the whole point of the movement.
-                if touches(palm, target.position, component.radius), palm.proxy.isGripping {
+                // Tested against the grasp point, not the wrist: the object
+                // has to be *in the hand*. Arriving isn't enough either — the
+                // hand has to close on it, which is the whole movement.
+                let inHand = distance(palm.proxy.gripPosition, target.position)
+                    <= palm.proxy.radius + component.radius
+                if inHand, palm.proxy.isGripping {
                     retire(target, component: component, songTime: songTime)
                 }
 

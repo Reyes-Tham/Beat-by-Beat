@@ -209,6 +209,7 @@ struct ImmersiveView: View {
             appModel.useCalibration = true
             clearCalibrationScene()
             configure()
+            if appModel.screen == .calibration { appModel.screen = .songSelection }
         } else if calibration.phase == .capturing, !confirmRoot.children.isEmpty {
             // Circle belongs to the confirm step only; clear it when the next
             // arm starts its six directions.
@@ -364,10 +365,16 @@ struct ImmersiveView: View {
             // During a capture the pad spans the manual box, which is the
             // widest reference available before a profile exists.
             let box = calibration.phase == .capturing ? appModel.manualVolume : appModel.volume
+            let position = box.point(at: unit)
             let proxy = HandProxy(
-                position: box.point(at: unit),
+                position: position,
+                gripPosition: position,
                 radius: HandProxy.simulatedRadius,
-                updatedAt: 0
+                updatedAt: 0,
+                // The Simulator has no fingers to close, so the stand-in
+                // always counts as gripping — otherwise grip notes could never
+                // be tested without a headset.
+                gripClosure: 1
             )
             // One mouse can't have two chiralities: when a specific hand is
             // being trained it takes that side, and only with Both does it

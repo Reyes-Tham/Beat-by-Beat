@@ -18,6 +18,8 @@ struct ContentView: View {
             switch appModel.screen {
             case .songSelection:
                 SongSelectionView(showSettings: $showSettings)
+            case .calibration:
+                CalibrationScreen()
             case .countdown:
                 CountdownView(songTitle: appModel.selectedSong.title) {
                     appModel.countdownFinished()
@@ -27,7 +29,8 @@ struct ContentView: View {
                 GameView(showSettings: $showSettings)
             case .results:
                 ResultsView(score: appModel.lastRun ?? .init(
-                    reached: appModel.hitCount, total: appModel.noteCount,
+                    points: appModel.livePoints,
+                    reached: appModel.hitCount,
                     excellent: 0, good: 0, date: Date()
                 )) {
                     appModel.backToSongs()

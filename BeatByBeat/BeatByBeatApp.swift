@@ -24,7 +24,7 @@ struct BeatByBeatApp: App {
         }
         // Song selection and the game panel are very different widths, so the
         // window follows its content rather than being pinned to one size.
-        .defaultSize(width: 880, height: 760)
+        .defaultSize(width: 880, height: 900)
         .windowResizability(.contentSize)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {

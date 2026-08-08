@@ -26,7 +26,7 @@ class AppModel {
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
     /// Which screen the window is showing.
-    enum Screen { case songSelection, countdown, game, results }
+    enum Screen { case songSelection, calibration, countdown, game, results }
     var screen: Screen = .songSelection
 
     /// Movements this session trains. Never empty — with nothing ticked there
@@ -66,11 +66,13 @@ class AppModel {
     /// Files the run that just ended and shows the summary.
     func recordRun() {
         guard noteCount > 0 else { return }
+        let excellent = judgements[.excellent] ?? 0
+        let good = judgements[.good] ?? 0
         let run = SessionScore(
+            points: SessionScore.points(excellent: excellent, good: good, reached: hitCount),
             reached: hitCount,
-            total: noteCount,
-            excellent: judgements[.excellent] ?? 0,
-            good: judgements[.good] ?? 0,
+            excellent: excellent,
+            good: good,
             date: Date()
         )
         ScoreStore.record(run, song: selectedSong.id, level: level)
@@ -242,8 +244,23 @@ class AppModel {
     private(set) var calibrationCancelRequests = 0
     private(set) var calibrationAdvanceRequests = 0
 
-    func startCalibration() { calibrationRequests += 1 }
-    func cancelCalibration() { calibrationCancelRequests += 1 }
+    func startCalibration() {
+        screen = .calibration
+        calibrationRequests += 1
+    }
+    func cancelCalibration() {
+        calibrationCancelRequests += 1
+        screen = .songSelection
+    }
+
+    /// Live points during a run, so the in-game readout matches the summary.
+    var livePoints: Int {
+        SessionScore.points(
+            excellent: judgements[.excellent] ?? 0,
+            good: judgements[.good] ?? 0,
+            reached: hitCount
+        )
+    }
     /// Manual lock, for the therapist and for the Simulator where there may be
     /// no head pose to dwell with.
     func advanceCalibration() { calibrationAdvanceRequests += 1 }

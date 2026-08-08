@@ -81,17 +81,24 @@ struct Song: Identifiable, Hashable {
 }
 
 /// Result of one run, kept per song and level.
+///
+/// Points, not a fraction. "22 of 25" makes the three that got away the
+/// headline, and for someone whose arm is the reason they missed, that reads
+/// as a report card. Points only ever go up, so a slower patient sees a
+/// smaller number rather than a visible shortfall.
 struct SessionScore: Codable, Equatable {
+    var points: Int
     var reached: Int
-    var total: Int
     var excellent: Int
     var good: Int
     var date: Date
 
-    /// Movement success, which is the number that matters clinically. Rhythm
-    /// accuracy is reported separately and deliberately not folded in.
-    var reachPercent: Int {
-        total > 0 ? Int((Double(reached) / Double(total) * 100).rounded()) : 0
+    /// Every reach scores. Timing only decides how much.
+    static func points(excellent: Int, good: Int, reached: Int) -> Int {
+        let onTime = excellent * 100
+        let close = good * 70
+        let rest = max(0, reached - excellent - good) * 50
+        return onTime + close + rest
     }
 
     var rhythmPercent: Int {
@@ -114,7 +121,7 @@ enum ScoreStore {
     /// Keeps whichever run reached more targets. Ties go to the newer run so a
     /// repeat session still shows as today's.
     static func record(_ score: SessionScore, song: String, level: ReachLevel) {
-        if let existing = best(song: song, level: level), existing.reached > score.reached {
+        if let existing = best(song: song, level: level), existing.points > score.points {
             return
         }
         guard let data = try? JSONEncoder().encode(score) else { return }

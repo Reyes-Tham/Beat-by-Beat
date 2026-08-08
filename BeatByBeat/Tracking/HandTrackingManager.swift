@@ -37,7 +37,14 @@ struct HandProxy {
     /// to train the attempt, not to measure pinch precision.
     static let gripThreshold: Float = 0.045
 
+    /// Wrist. Where the *arm* got to, which is what reaching measures.
     var position: SIMD3<Float>
+    /// Between the thumb and index tips — where a grasped object would sit.
+    ///
+    /// Separate from `position` because they are ~10cm apart and answer
+    /// different questions: testing a grip against the wrist meant the hand had
+    /// to overshoot the target by a whole hand's length before it counted.
+    var gripPosition: SIMD3<Float>
     var radius: Float = HandProxy.defaultRadius
     var updatedAt: TimeInterval
     /// How closed the hand is, 0 open … 1 shut.
@@ -164,11 +171,30 @@ final class HandTrackingManager {
         guard wrist.isTracked else { return nil }
 
         let world = anchor.originFromAnchorTransform * wrist.anchorFromJointTransform
+        let wristPosition = SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z)
+
         return HandProxy(
-            position: SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z),
+            position: wristPosition,
+            gripPosition: graspPoint(of: skeleton, anchor: anchor) ?? wristPosition,
             updatedAt: anchor.timestamp,
             gripClosure: closure(of: skeleton)
         )
+    }
+
+    /// Midpoint of the thumb and index tips, in world space.
+    private static func graspPoint(
+        of skeleton: HandSkeleton,
+        anchor: HandAnchor
+    ) -> SIMD3<Float>? {
+        let thumb = skeleton.joint(.thumbTip)
+        let index = skeleton.joint(.indexFingerTip)
+        guard thumb.isTracked, index.isTracked else { return nil }
+
+        func world(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
+            let m = anchor.originFromAnchorTransform * joint.anchorFromJointTransform
+            return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+        }
+        return (world(thumb) + world(index)) / 2
     }
 
     /// Thumb tip to index tip, mapped to 0…1. Nil-safe: an untracked fingertip
