@@ -47,9 +47,7 @@ struct CalibrationScreen: View {
                         captureStep
                     }
 
-                    if AppModel.isSimulator, appModel.simulateHandWithMouse {
-                        HandPad()
-                    }
+                    if showsHandPad { HandPad() }
                 }
                 .padding(.horizontal, 36)
                 .padding(.vertical, 20)
@@ -85,7 +83,10 @@ struct CalibrationScreen: View {
             .padding(.horizontal, 36)
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 620, minHeight: 640)
+        // Taller with the pad, which brings its own 200-odd points. At the
+        // shorter floor the scroll view swallowed the depth slider, and a
+        // control you have to scroll to find is one nobody finds.
+        .frame(minWidth: 620, minHeight: showsHandPad ? 820 : 640)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environment(appModel)
@@ -100,6 +101,10 @@ struct CalibrationScreen: View {
             startIfReady()
         }
         .onChange(of: appModel.immersiveSpaceState) { startIfReady() }
+    }
+
+    private var showsHandPad: Bool {
+        AppModel.isSimulator && appModel.simulateHandWithMouse
     }
 
     /// Launching lands on this screen directly, which means no button was
@@ -132,9 +137,19 @@ struct CalibrationScreen: View {
         }
 
         if appModel.calibrationAwaitingHand {
-            Label("Looking for your hand — move it into view.", systemImage: "hand.raised")
-                .font(.callout)
-                .foregroundStyle(.orange)
+            // The Simulator reports no hand anchors at all, so "move it into
+            // view" is advice nobody can follow there. Point at the stand-in
+            // instead, which is the only thing that can finish a capture
+            // without a headset.
+            Label(
+                AppModel.isSimulator && appModel.simulateHandWithMouse
+                    ? "No hand tracking here — drag the pad below to stand in for your hand."
+                    : "Looking for your hand — move it into view.",
+                systemImage: AppModel.isSimulator ? "cursorarrow.rays" : "hand.raised"
+            )
+            .font(.callout)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
         } else {
             ProgressView(value: Double(appModel.calibrationHold))
                 .tint(.blue)

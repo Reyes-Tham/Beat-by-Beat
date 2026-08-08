@@ -147,7 +147,12 @@ class AppModel {
     /// The pad lives in the window rather than the immersive space on purpose:
     /// anything with an `InputTargetComponent` sitting between the player and
     /// the window swallows every pinch aimed at the UI.
-    var simulateHandWithMouse = false
+    ///
+    /// On by default in the Simulator. Off, there is no palm at all there, so
+    /// `acceptAxis` has nothing to record and calibration cannot be completed —
+    /// the screen sits on the first of six directions with Accept greyed out
+    /// and no indication that the way through is a setting two taps away.
+    var simulateHandWithMouse = AppModel.isSimulator
 
     /// Fake palm position in unit-cube space, or nil before the first drag.
     var simulatedPalmUnit: SIMD3<Float>?
