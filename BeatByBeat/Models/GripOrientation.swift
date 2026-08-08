@@ -37,15 +37,6 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
 
     /// Palm direction this orientation asks for, in world space.
     ///
-    /// The cup grip mirrors: each hand closes toward the body's midline, so a
-    /// right hand's palm faces left and a left hand's faces right.
-    func requiredPalmNormal(for hand: TrainingHand) -> SIMD3<Float> {
-        switch self {
-        case .cup:      [hand == .left ? 1 : -1, 0, 0]
-        case .overhand: [0, -1, 0]
-        }
-    }
-
     /// Where the object has to be carried to, as an offset in unit space.
     ///
     /// Chosen to match the object: a mug slides across the surface it is on,
@@ -58,17 +49,22 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// Cosine of the widest acceptable error, ~41°.
+    /// The approach this orientation asks for.
     ///
-    /// The two orientations are 90° apart, so anything looser than cos(45°)
-    /// makes a palm held exactly between them satisfy *both* — which is how
-    /// the orientations stopped meaning anything. This leaves a small dead
-    /// band in the middle instead: a hand that hasn't committed to either turn
-    /// scores neither, which is the honest answer.
-    static let tolerance: Float = 0.75
+    /// Approach, not palm facing. Asking which way the wrist is turned demands
+    /// a textbook hand pose and fails as soon as someone comes at the object
+    /// from a natural angle. Asking where the object sits relative to the palm
+    /// describes the same two tasks without caring how the hand got there —
+    /// and it is checked only at the moment of the grab, so the arm is free to
+    /// travel however it likes on the way in.
+    var approach: ApproachDirection {
+        switch self {
+        case .cup: .side
+        case .overhand: .top
+        }
+    }
 
-    func matches(palmNormal: SIMD3<Float>, hand: TrainingHand) -> Bool {
-        guard length(palmNormal) > 0.1 else { return true }  // unknown → don't block
-        return dot(normalize(palmNormal), requiredPalmNormal(for: hand)) >= Self.tolerance
+    func matches(approach direction: ApproachDirection) -> Bool {
+        direction == approach
     }
 }

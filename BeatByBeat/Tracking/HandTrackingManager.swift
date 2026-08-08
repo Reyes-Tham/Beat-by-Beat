@@ -32,14 +32,7 @@ struct HandProxy {
     /// contact feels — that's `defaultRadius`, and only on device.
     static let simulatedRadius: Float = 0.085
 
-    /// Hand openness, as mean fingertip-to-wrist distance over hand length.
-    /// An open hand sits near 1.9; a closed fist near 1.1.
-    ///
-    /// A ratio rather than a raw distance so it works across hand sizes, and
-    /// whole-hand curl rather than a thumb-to-index pinch because the movement
-    /// being trained is closing around a mug, not pinching at one.
-    static let openRatio: Float = 1.65
-    static let closedRatio: Float = 1.35
+
 
     /// Wrist. Where the *arm* got to, which is what reaching measures.
     var position: SIMD3<Float>
@@ -51,28 +44,20 @@ struct HandProxy {
     var gripPosition: SIMD3<Float>
     var radius: Float = HandProxy.defaultRadius
     var updatedAt: TimeInterval
-    /// Mean fingertip-to-wrist distance over hand length. **Nil when the hand
-    /// pose isn't known**, which is not the same as open — reporting unknown as
-    /// open is what let a closed fist arm a grip target, since ARKit loses the
+    /// Full hand shape, in the hand's own frame. **Nil when the pose isn't
+    /// known**, which is not the same as open — reporting unknown as open is
+    /// what let a closed fist arm a grip target, since ARKit loses the
     /// fingertips exactly when the hand closes.
-    var openness: Float?
-    /// Direction the palm faces, in world space. Zero when unknown.
-    var palmNormal: SIMD3<Float> = .zero
+    var pose: HandPose?
 
     /// Whether the hand pose is known at all.
-    var handKnown: Bool { openness != nil }
+    var handKnown: Bool { pose != nil }
 
-    /// Both are false when the pose is unknown. The dead band between them is
-    /// deliberate: a grip has to be a *movement* from one to the other, not a
-    /// hand that drifted across a single threshold.
-    var isGripping: Bool {
-        guard let openness else { return false }
-        return openness <= HandProxy.closedRatio
-    }
-    var isOpen: Bool {
-        guard let openness else { return false }
-        return openness >= HandProxy.openRatio
-    }
+    /// Both are false when the pose is unknown. Used for coarse checks only —
+    /// grabbing an object goes through `GrabConfidence`, which weighs the whole
+    /// hand rather than one number.
+    var isGripping: Bool { (pose?.fingerCurl ?? 0) >= 0.6 }
+    var isOpen: Bool { (pose?.fingerCurl ?? 1) <= 0.3 }
 }
 
 /// Streams palm positions from ARKit.
@@ -95,6 +80,9 @@ final class HandTrackingManager {
     private(set) var status: Status = .idle
     private(set) var left: HandProxy?
     private(set) var right: HandProxy?
+
+    private var previousPose: [HandAnchor.Chirality: HandPose] = [:]
+    private var previousPoseTime: [HandAnchor.Chirality: TimeInterval] = [:]
 
     /// Called after each batch of anchor updates. Not observed by SwiftUI.
     @ObservationIgnored var onUpdate: (() -> Void)?
@@ -177,7 +165,7 @@ final class HandTrackingManager {
     }
 
     private func apply(_ anchor: HandAnchor) {
-        let proxy = anchor.isTracked ? Self.palmProxy(from: anchor) : nil
+        let proxy = anchor.isTracked ? makeProxy(from: anchor) : nil
         switch anchor.chirality {
         case .left: left = proxy
         case .right: right = proxy
@@ -185,8 +173,7 @@ final class HandTrackingManager {
         }
     }
 
-    /// Wrist position in world space.
-    private static func palmProxy(from anchor: HandAnchor) -> HandProxy? {
+    private func makeProxy(from anchor: HandAnchor) -> HandProxy? {
         guard let skeleton = anchor.handSkeleton else { return nil }
 
         let wrist = skeleton.joint(.wrist)
@@ -195,88 +182,28 @@ final class HandTrackingManager {
         let world = anchor.originFromAnchorTransform * wrist.anchorFromJointTransform
         let wristPosition = SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z)
 
+        let now = CACurrentMediaTime()
+        let delta = now - (previousPoseTime[anchor.chirality] ?? now)
+        let pose = HandPose.make(
+            from: anchor,
+            previous: previousPose[anchor.chirality],
+            deltaTime: delta
+        )
+        if let pose {
+            previousPose[anchor.chirality] = pose
+            previousPoseTime[anchor.chirality] = now
+        }
+
         return HandProxy(
             position: wristPosition,
-            gripPosition: graspPoint(of: skeleton, anchor: anchor) ?? wristPosition,
+            // The palm, not the fingertips: it is the stable centre of the
+            // hand and the thing a grip volume is built around.
+            gripPosition: pose?.palmCenter ?? wristPosition,
             updatedAt: anchor.timestamp,
-            openness: openness(of: skeleton),
-            palmNormal: palmNormal(of: skeleton, anchor: anchor) ?? .zero
+            pose: pose
         )
     }
 
-    /// Midpoint of the thumb and index tips, in world space.
-    private static func graspPoint(
-        of skeleton: HandSkeleton,
-        anchor: HandAnchor
-    ) -> SIMD3<Float>? {
-        let thumb = skeleton.joint(.thumbTip)
-        let index = skeleton.joint(.indexFingerTip)
-        guard thumb.isTracked, index.isTracked else { return nil }
 
-        func world(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
-            let m = anchor.originFromAnchorTransform * joint.anchorFromJointTransform
-            return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
-        }
-        return (world(thumb) + world(index)) / 2
-    }
 
-    /// Which way the palm faces, from the plane through the wrist and the
-    /// index and little knuckles.
-    ///
-    /// The cross product's sign follows the hand's chirality, so the left hand
-    /// is flipped — otherwise every orientation would read inverted on one
-    /// side and grips would only ever register with one hand.
-    private static func palmNormal(
-        of skeleton: HandSkeleton,
-        anchor: HandAnchor
-    ) -> SIMD3<Float>? {
-        let wrist = skeleton.joint(.wrist)
-        let index = skeleton.joint(.indexFingerKnuckle)
-        let little = skeleton.joint(.littleFingerKnuckle)
-        guard wrist.isTracked, index.isTracked, little.isTracked else { return nil }
-
-        func world(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
-            let m = anchor.originFromAnchorTransform * joint.anchorFromJointTransform
-            return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
-        }
-
-        let origin = world(wrist)
-        let normal = cross(world(index) - origin, world(little) - origin)
-        guard length(normal) > 1e-5 else { return nil }
-        let sign: Float = anchor.chirality == .left ? -1 : 1
-        return normalize(normal) * sign
-    }
-
-    /// How open the hand is: mean fingertip-to-wrist distance divided by hand
-    /// length. Nil when too little of the hand is tracked to say.
-    ///
-    /// Averaged over whichever fingertips are visible rather than demanding
-    /// all four, so one occluded finger degrades the reading instead of
-    /// discarding it — but two are required, because a single tip is as likely
-    /// to be a tracking artefact as a pose.
-    private static func openness(of skeleton: HandSkeleton) -> Float? {
-        let wrist = skeleton.joint(.wrist)
-        let knuckle = skeleton.joint(.middleFingerKnuckle)
-        guard wrist.isTracked, knuckle.isTracked else { return nil }
-
-        func local(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
-            let c = joint.anchorFromJointTransform.columns.3
-            return SIMD3(c.x, c.y, c.z)
-        }
-
-        let origin = local(wrist)
-        let handLength = distance(local(knuckle), origin)
-        guard handLength > 0.02 else { return nil }
-
-        let tips: [HandSkeleton.JointName] = [
-            .indexFingerTip, .middleFingerTip, .ringFingerTip, .littleFingerTip
-        ]
-        let reach = tips
-            .map { skeleton.joint($0) }
-            .filter(\.isTracked)
-            .map { distance(local($0), origin) }
-
-        guard reach.count >= 2 else { return nil }
-        return (reach.reduce(0, +) / Float(reach.count)) / handLength
-    }
 }

@@ -230,7 +230,7 @@ final class TargetField {
                   let beatTime = component.beatTime,
                   songTime > beatTime + component.travelTime,
                   // Never yank something out of a hand that is carrying it.
-                  !component.gripHeld
+                  !component.grab.isHolding
             else { continue }
 
             target.components.remove(TargetComponent.self)
@@ -288,120 +288,115 @@ final class TargetField {
         distance(palm.proxy.position, position) <= palm.proxy.radius + radius
     }
 
-    /// Grip is a movement, not a pose: the open hand has to be seen at the
-    /// target first, and only then does closing score.
+    /// Grabbing, as a blended judgement rather than a chain of booleans.
     ///
-    /// Without the open step a target scored off whatever the hand happened to
-    /// already be doing when it arrived — a patient holding a loose fist swept
-    /// through everything, which is what made grips feel arbitrary.
+    /// Finger curl, thumb opposition, whether the object sits inside the
+    /// volume the hand could close around, how near the palm is, and whether
+    /// the hand is actively closing all contribute. Any one of those fails
+    /// often enough on a tracked hand — and far more often on an impaired one
+    /// — that requiring all of them at once is how grabs come to feel
+    /// arbitrary.
     private func advanceGrip(
         _ target: Entity,
         component: TargetComponent,
         palm: (hand: TrainingHand, proxy: HandProxy),
         songTime: TimeInterval
     ) {
-        // Once it is being carried the object goes where the hand goes, and
-        // releasing is what ends the note — so this branch runs before any of
-        // the proximity checks below.
-        if component.gripHeld {
-            carry(target, component: component, palm: palm, songTime: songTime)
-            return
-        }
-
-        // Grasp point, not the wrist: the object has to be *in the hand*.
-        let inHand = distance(palm.proxy.gripPosition, target.position)
-            <= palm.proxy.radius + component.radius
-
-        // Leaving disarms. Otherwise a hand could open here, wander off, and
-        // come back already closed — which is not grasping anything.
-        guard inHand else {
-            if component.gripArmed || component.gripFrames > 0 {
-                var reset = component
-                reset.gripArmed = false
-                reset.gripFrames = 0
-                target.components.set(reset)
-                TargetEntity.setGripArmed(target, armed: false, hand: component.hand)
-            }
-            return
-        }
-
         // An unknown pose is not an open hand. ARKit drops the fingertips
         // exactly when the hand closes, so treating unknown as open let a
-        // closed fist arm the target on arrival.
-        guard palm.proxy.handKnown else { return }
-
-        let turned = component.gripOrientation.map {
-            $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
-        } ?? true
-        guard turned else { return }
+        // closed fist score on arrival.
+        guard let pose = palm.proxy.pose else { return }
 
         var state = component
-        if !state.gripArmed {
-            // Open, held: the hand has to actually be open at the mug before
-            // closing on it counts.
-            state.gripFrames = palm.proxy.isOpen ? state.gripFrames + 1 : 0
-            if state.gripFrames >= Self.gripHoldFrames {
-                state.gripArmed = true
-                state.gripFrames = 0
-                TargetEntity.setGripArmed(target, armed: true, hand: component.hand)
-            }
-            target.components.set(state)
-            return
-        }
+        var grab = state.grab
 
-        state.gripFrames = palm.proxy.isGripping ? state.gripFrames + 1 : 0
-        if state.gripFrames >= Self.gripHoldFrames {
-            // Picked up. With no destination this is the whole movement.
-            guard state.carryDestination != nil else {
+        let confidence = GrabConfidence.evaluate(
+            pose: pose,
+            object: target.position,
+            objectRadius: component.radius,
+            maxCurl: maxComfortableCurl
+        ).total
+
+        // Generous: the object only has to be within reach of the hand for the
+        // machine to start paying attention.
+        let near = pose.distanceToPalm(target.position)
+            <= pose.handLength * 1.8 + component.radius
+        // Judged on curl against this patient's own maximum, so a hand that
+        // cannot fully open still registers as open.
+        let handOpen = pose.fingerCurl / max(0.25, maxComfortableCurl) <= 0.35
+
+        if grab.isHolding {
+            // Carried: the object goes where the hand goes.
+            target.position = pose.gripVolumeCenter
+            _ = grab.update(confidence: confidence, objectNear: true, handOpen: handOpen)
+
+            if let destination = state.carryDestination {
+                let overZone = distance(target.position, destination)
+                    <= component.radius + TargetEntity.defaultRadius * 1.35
+                if let zone = dropZone(for: component.noteIndex) {
+                    TargetEntity.setDropZoneActive(zone, active: overZone, hand: component.hand)
+                }
+                if grab.hasReleased {
+                    state.grab = grab
+                    target.components.set(state)
+                    if overZone {
+                        retire(target, component: state, songTime: songTime)
+                    } else {
+                        // A drop is not a failure: it goes back so the movement
+                        // can be tried again rather than being lost.
+                        dropCarried(target, state: state)
+                    }
+                    return
+                }
+            } else if grab.hasReleased {
+                state.grab = grab
                 target.components.set(state)
                 retire(target, component: state, songTime: songTime)
                 return
             }
-            state.gripHeld = true
-            state.gripFrames = 0
-            TargetEntity.removeApproachShell(from: target)
+
+            state.grab = grab
+            target.components.set(state)
+            return
         }
+
+        // Approach is checked only at the moment of the grab, so the hand can
+        // arrive however it likes and still be asked for the right task.
+        let approachOK = state.gripOrientation.map {
+            $0.matches(approach: .from(palmCenter: pose.palmCenter, object: target.position))
+        } ?? true
+
+        let grabbed = grab.update(
+            confidence: approachOK ? confidence : 0,
+            objectNear: near,
+            handOpen: handOpen
+        )
+        state.grab = grab
         target.components.set(state)
+
+        TargetEntity.setGripArmed(
+            target,
+            armed: grab.phase == .enclosing || grab.isHolding,
+            hand: component.hand
+        )
+
+        if grabbed {
+            TargetEntity.removeApproachShell(from: target)
+            // Nothing to carry means picking it up was the whole movement.
+            if state.carryDestination == nil {
+                retire(target, component: state, songTime: songTime)
+            }
+        }
     }
 
-    /// Carrying: the object follows the hand until it is released.
-    ///
-    /// Released inside the drop zone scores. Released anywhere else is a drop,
-    /// and the object goes back to where it started so the movement can be
-    /// tried again rather than being lost.
-    private func carry(
-        _ target: Entity,
-        component: TargetComponent,
-        palm: (hand: TrainingHand, proxy: HandProxy),
-        songTime: TimeInterval
-    ) {
-        guard let destination = component.carryDestination else { return }
-
-        target.position = palm.proxy.gripPosition
-        let overZone = distance(target.position, destination)
-            <= component.radius + TargetEntity.defaultRadius * 1.35
-        if let zone = dropZone(for: component.noteIndex) {
-            TargetEntity.setDropZoneActive(zone, active: overZone, hand: component.hand)
-        }
-
-        // An unknown pose is not an open hand, so a tracking gap can't be
-        // mistaken for letting go.
-        guard palm.proxy.handKnown, palm.proxy.isOpen else { return }
-
-        var state = component
-        state.gripFrames += 1
-        target.components.set(state)
-        guard state.gripFrames >= Self.gripHoldFrames else { return }
-
-        if overZone {
-            retire(target, component: state, songTime: songTime)
-        } else {
-            state.gripHeld = false
-            state.gripArmed = false
-            state.gripFrames = 0
-            target.components.set(state)
-            target.position = state.origin
-            TargetEntity.setGripArmed(target, armed: false, hand: state.hand)
+    private func dropCarried(_ target: Entity, state: TargetComponent) {
+        var reset = state
+        reset.grab = GrabState()
+        target.components.set(reset)
+        target.position = state.origin
+        TargetEntity.setGripArmed(target, armed: false, hand: state.hand)
+        if let zone = dropZone(for: state.noteIndex) {
+            TargetEntity.setDropZoneActive(zone, active: false, hand: state.hand)
         }
     }
 
@@ -409,10 +404,10 @@ final class TargetField {
         root.children.first { $0.name == "Drop#\(noteIndex)" }
     }
 
-    /// Frames a grip pose must persist before it counts. Hand updates arrive at
-    /// roughly 90 Hz, so this is about 40 ms — enough to reject a single noisy
-    /// frame without being felt.
-    private static let gripHoldFrames = 4
+    /// This patient's own comfortable maximum closure, from calibration.
+    /// Curl is scored against this rather than a healthy full fist, so a hand
+    /// that cannot close all the way is not permanently short of the threshold.
+    var maxComfortableCurl: Float = 1.0
 
     /// Walks the hand through a pour's waypoints, in order.
     ///

@@ -202,6 +202,9 @@ struct ImmersiveView: View {
                 ? appModel.simulatedPalmUnit.map { appModel.manualVolume.point(at: $0) }
                 : nil)
 
+        if let curl = handTracking.proxy(for: calibration.currentHand)?.pose?.fingerCurl {
+            calibration.note(curl: curl)
+        }
         calibration.record(palm: palm, deltaTime: dt)
         calibration.updateDwell(isLooking: isLookingAtConfirmCircle(head: head), deltaTime: dt)
 
@@ -338,6 +341,7 @@ struct ImmersiveView: View {
         field.volumeForHand = { appModel.volume(for: $0) }
         field.hitSound = hitSound
         field.spawnSound = spawnSound
+        field.maxComfortableCurl = appModel.calibration?.maxCurl ?? 1.0
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount
@@ -382,11 +386,12 @@ struct ImmersiveView: View {
                 gripPosition: position,
                 radius: HandProxy.simulatedRadius,
                 updatedAt: 0,
-                // No fingers to close in the Simulator, so the stand-in
-                // reports whatever the panel's grip toggle says.
-                openness: appModel.simulatedGripClosed
-                    ? HandProxy.closedRatio
-                    : HandProxy.openRatio
+                // No hand skeleton in the Simulator, so the stand-in
+                // synthesises a pose from the panel's grip toggle.
+                pose: HandPose.simulated(
+                    at: position,
+                    closed: appModel.simulatedGripClosed
+                )
             )
             // One mouse can't have two chiralities: when a specific hand is
             // being trained it takes that side, and only with Both does it

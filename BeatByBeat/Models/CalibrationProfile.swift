@@ -87,6 +87,13 @@ struct CalibrationProfile: Codable, Equatable {
     var safetyScale: Float
     /// Fastest comfortable wrist speed seen during the capture, m/s.
     var peakSpeed: Float
+    /// Most this patient comfortably closed their hand during the capture.
+    ///
+    /// Grabs are scored against this rather than a healthy full fist, so a
+    /// hand that cannot close all the way is not permanently short of the
+    /// threshold — the same principle as measuring reach against their own
+    /// workspace instead of a normal one.
+    var maxCurl: Float = 1.0
     var createdAt: Date
 
     func boundary(for hand: TrainingHand) -> ArmBoundary? {

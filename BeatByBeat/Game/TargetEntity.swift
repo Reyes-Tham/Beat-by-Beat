@@ -18,15 +18,8 @@ struct TargetComponent: Component {
     var movement: MovementType = .reach
     /// Set only on grip targets: how the hand has to be turned.
     var gripOrientation: GripOrientation?
-    /// Grip targets only: the open hand has been seen at the target, so a
-    /// closing hand now counts. Without this the target scores off whatever
-    /// the hand happened to already be doing when it arrived.
-    var gripArmed: Bool = false
-    /// Consecutive frames the hand has held the pose being waited for. Hand
-    /// tracking is noisy enough that a single frame is not evidence.
-    var gripFrames: Int = 0
-    /// Grip targets only: currently being carried.
-    var gripHeld: Bool = false
+    /// Grip targets only: where this object is in the grab machine.
+    var grab = GrabState()
     /// Where a carried target has to be set down, in world space.
     var carryDestination: SIMD3<Float>?
     /// Where it started, so a drop can put it back.

@@ -67,6 +67,7 @@ final class CalibrationManager {
     private var best: SIMD3<Float>?
     private var steadyFor: TimeInterval = 0
     private var recentSpeed: Float = 0
+    private var observedMaxCurl: Float = 0
     private var speeds: [Float] = []
     private var lastSample: (position: SIMD3<Float>, time: TimeInterval)?
     private var safetyScale: Float = 0.85
@@ -145,6 +146,13 @@ final class CalibrationManager {
     /// Feed every frame. `palm` is nil when the hand isn't tracked, which is
     /// itself data — a limit the headset imposed rather than one the patient
     /// chose.
+    /// Records the hand shape alongside the reach. Patients open and close
+    /// their hand naturally while reaching, so the maximum comes for free
+    /// rather than needing a step of its own.
+    func note(curl: Float) {
+        observedMaxCurl = max(observedMaxCurl, curl)
+    }
+
     func record(palm: SIMD3<Float>?, deltaTime: TimeInterval) {
         guard phase == .capturing else { return }
 
@@ -267,6 +275,9 @@ final class CalibrationManager {
             arms: arms,
             safetyScale: safetyScale,
             peakSpeed: robustPeakSpeed(),
+            // Floor it: a capture where the hand never closed would otherwise
+            // make every later grab impossible.
+            maxCurl: max(0.45, observedMaxCurl),
             createdAt: Date()
         )
         phase = .finished
