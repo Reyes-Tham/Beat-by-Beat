@@ -89,7 +89,10 @@ class AppModel {
 
     // MARK: - Session config
 
-    var mode: FieldMode = .practice
+    /// Rhythm by default: practice is a debug scene now, and defaulting to it
+    /// meant the field filled itself with spheres the moment the space opened —
+    /// including during calibration.
+    var mode: FieldMode = .rhythm
     var level: ReachLevel = .three
     var trainingHand: TrainingHand = .both
     var bpm: Double = 120

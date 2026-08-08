@@ -43,6 +43,13 @@ struct ImmersiveView: View {
 
             configure(field)
 
+            // The screen can ask for a capture before this closure has run —
+            // launching straight into calibration does exactly that — so a
+            // pending request is picked up here rather than being dropped.
+            if appModel.screen == .calibration, calibration.phase == .idle {
+                beginCalibration()
+            }
+
             for hand in [TrainingHand.left, .right] {
                 let marker = TargetEntity.makeHandProxyMarker(radius: HandProxy.defaultRadius)
                 marker.isEnabled = false
@@ -345,7 +352,9 @@ struct ImmersiveView: View {
     private func configure(_ target: TargetField? = nil) {
         guard let field = target ?? field else { return }
         applySettings(field)
-        guard !appModel.isPlaying else { return }
+        // A capture owns the scene while it runs; resetting would drop practice
+        // targets on top of the probe and the reach preview.
+        guard !appModel.isPlaying, calibration.phase == .idle else { return }
         field.reset()
     }
 

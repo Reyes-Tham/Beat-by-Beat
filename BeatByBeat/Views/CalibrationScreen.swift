@@ -89,7 +89,17 @@ struct CalibrationScreen: View {
                 appModel.immersiveSpaceState = .inTransition
                 _ = await openImmersiveSpace(id: appModel.immersiveSpaceID)
             }
+            startIfReady()
         }
+        .onChange(of: appModel.immersiveSpaceState) { startIfReady() }
+    }
+
+    /// Launching lands on this screen directly, which means no button was
+    /// pressed to request the capture — so it has to ask for one itself, once
+    /// there is a space to run in.
+    private func startIfReady() {
+        guard appModel.immersiveSpaceState == .open, !appModel.isCalibrating else { return }
+        appModel.startCalibration()
     }
 
     @ViewBuilder
