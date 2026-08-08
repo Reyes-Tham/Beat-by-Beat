@@ -179,6 +179,10 @@ class AppModel {
     var calibrationHold: Float = 0
     var calibrationPointsCaptured = 0
     var calibrationHandProgress = ""
+    /// Direction the current step is asking for, for the stick-figure guide.
+    var calibrationAxis: ReachAxis = .forward
+    /// Arm being measured right now.
+    var calibrationHand: TrainingHand = .right
     /// Reach captured so far for the current arm, in metres.
     var calibrationSpan: SIMD3<Float> = .zero
     private(set) var calibrationRequests = 0

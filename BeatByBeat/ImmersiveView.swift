@@ -266,6 +266,8 @@ struct ImmersiveView: View {
         appModel.calibrationHold = calibration.holdProgress
         appModel.calibrationPointsCaptured = calibration.capturedPointCount
         appModel.calibrationHandProgress = calibration.handProgress
+        appModel.calibrationAxis = calibration.currentAxis
+        appModel.calibrationHand = calibration.currentHand
         appModel.calibrationStepName = calibration.currentAxis.shortName
         appModel.calibrationProgress = calibration.progress
         appModel.calibrationAwaitingHand = calibration.awaitingHand

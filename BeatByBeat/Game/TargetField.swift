@@ -55,6 +55,12 @@ final class TargetField {
 
     private let root: Entity
     private let outline: Entity
+    /// Hit effects live here rather than loose under `root`, so clearing the
+    /// field can't destroy a dust cloud or a praise label mid-flight.
+    private let effects: Entity
+    /// Pre-warmed dust emitters, cycled round-robin.
+    private var dustPool: [Entity] = []
+    private var nextDust = 0
     private var pendingSpawns = 0
     /// Last known palm positions, so a delayed respawn can still steer clear of
     /// a hand that hasn't moved since the hit.
@@ -65,6 +71,18 @@ final class TargetField {
         self.outline = Entity()
         outline.name = "VolumeOutline"
         root.addChild(outline)
+
+        self.effects = Entity()
+        effects.name = "Effects"
+        root.addChild(effects)
+
+        // Eight is comfortably more than can be in flight at once: dust lives
+        // ~1.2s and hits come at most about once a second at 5 stars.
+        for _ in 0..<8 {
+            let emitter = TargetEntity.makeDustEmitter(radius: TargetEntity.defaultRadius)
+            effects.addChild(emitter)
+            dustPool.append(emitter)
+        }
     }
 
     // MARK: - Lifecycle
@@ -72,7 +90,8 @@ final class TargetField {
     /// Destroys every live target. Used by reset, and when a song stops so
     /// nothing is left floating in the scene.
     func clearTargets() {
-        for child in root.children.reversed() where child !== outline {
+        for child in root.children.reversed()
+        where child !== outline && child !== effects {
             TargetEntity.destroy(child)
         }
         pendingSpawns = 0
@@ -271,24 +290,18 @@ final class TargetField {
     /// collapses and is destroyed within a couple of frames, and would take
     /// the particles and the audio player with it.
     private func showShatter(hand: TrainingHand, at position: SIMD3<Float>) {
-        let dust = TargetEntity.makeDustBurst(hand: hand, radius: TargetEntity.defaultRadius)
+        guard !dustPool.isEmpty else { return }
+        let dust = dustPool[nextDust % dustPool.count]
+        nextDust += 1
+
         dust.position = position
-        root.addChild(dust)
+        TargetEntity.fireDust(dust, hand: hand)
 
         if let hitSound {
             // Spatial, so the ding comes from where the hand actually is —
             // useful feedback in its own right when a target is off to one side.
             dust.spatialAudio = SpatialAudioComponent()
             dust.playAudio(hitSound)
-        }
-
-        Task {
-            // Emit for a moment, then let the existing particles live out
-            // their lifespan so the cloud thins rather than cutting off.
-            try? await Task.sleep(for: .milliseconds(90))
-            TargetEntity.stopDust(dust)
-            try? await Task.sleep(for: .seconds(TargetEntity.dustSeconds))
-            TargetEntity.destroy(dust)
         }
     }
 
@@ -297,7 +310,7 @@ final class TargetField {
     private func showPraise(_ judgement: Judgement, at position: SIMD3<Float>) {
         let label = TargetEntity.makePraiseLabel(for: judgement)
         label.position = position + [0, TargetEntity.defaultRadius + 0.05, 0]
-        root.addChild(label)
+        effects.addChild(label)
         TargetEntity.playPraiseAnimation(on: label)
 
         Task {

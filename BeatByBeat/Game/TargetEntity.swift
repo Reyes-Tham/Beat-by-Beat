@@ -342,12 +342,13 @@ enum TargetEntity {
         )
     }
 
-    /// A puff of fine dust in the target's own colour.
+    /// An idle dust emitter, ready to be fired.
     ///
-    /// Parented by the caller to the field root, not to the target — the
-    /// target is destroyed within a couple of frames and would take the
-    /// particles with it.
-    static func makeDustBurst(hand: TrainingHand, radius: Float) -> Entity {
+    /// Built once and reused rather than created per hit. A freshly created
+    /// emitter has to be registered, started and stopped inside a couple of
+    /// frames, and it does not reliably get to emit in that window — which is
+    /// why the effect only appeared some of the time.
+    static func makeDustEmitter(radius: Float) -> Entity {
         let entity = Entity()
         entity.name = "Dust"
 
@@ -358,18 +359,17 @@ enum TargetEntity {
         particles.birthDirection = .normal
         particles.speed = 0.32
         particles.speedVariation = 0.24
-        particles.isEmitting = true
+        // Silent until fired: continuous emission is off, and each hit
+        // releases one burst.
+        particles.isEmitting = false
+        particles.burstCount = 320
 
-        particles.mainEmitter.birthRate = 2600
+        particles.mainEmitter.birthRate = 0
         particles.mainEmitter.lifeSpan = 0.65
         particles.mainEmitter.lifeSpanVariation = 0.35
         // Fine: small enough to read as dust rather than as debris.
         particles.mainEmitter.size = 0.0035
         particles.mainEmitter.sizeVariation = 0.0022
-        particles.mainEmitter.color = .evolving(
-            start: .single(tint(for: hand)),
-            end: .single(.init(white: 1, alpha: 0))
-        )
         particles.mainEmitter.opacityCurve = .easeFadeOut
         particles.mainEmitter.blendMode = .additive
         // A little gravity so the cloud settles instead of hanging.
@@ -380,10 +380,15 @@ enum TargetEntity {
         return entity
     }
 
-    /// Stops emission so the existing particles finish their lifespan and the
-    /// cloud fades out, rather than the burst continuing to feed itself.
-    static func stopDust(_ entity: Entity) {
-        entity.components[ParticleEmitterComponent.self]?.isEmitting = false
+    /// Fires one burst, recoloured for the arm that earned it.
+    static func fireDust(_ entity: Entity, hand: TrainingHand) {
+        guard var particles = entity.components[ParticleEmitterComponent.self] else { return }
+        particles.mainEmitter.color = .evolving(
+            start: .single(tint(for: hand)),
+            end: .single(.init(white: 1, alpha: 0))
+        )
+        particles.burst()
+        entity.components.set(particles)
     }
 
     // MARK: - Appearance

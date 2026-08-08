@@ -109,6 +109,13 @@ struct ContentView: View {
         Text(appModel.calibrationInstruction)
             .foregroundStyle(.secondary)
 
+        HStack {
+            Spacer()
+            StickFigureGuide(axis: appModel.calibrationAxis,
+                             hand: appModel.calibrationHand)
+            Spacer()
+        }
+
         if appModel.calibrationAwaitingHand {
             Label("Looking for your hand — move it into view.",
                   systemImage: "hand.raised")
