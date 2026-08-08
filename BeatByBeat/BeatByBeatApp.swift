@@ -22,9 +22,10 @@ struct BeatByBeatApp: App {
                     .environment(appModel)
             }
         }
-        // Tall enough for the control panel without the action row being
-        // pushed out of the window.
-        .defaultSize(width: 520, height: 860)
+        // Song selection and the game panel are very different widths, so the
+        // window follows its content rather than being pinned to one size.
+        .defaultSize(width: 880, height: 760)
+        .windowResizability(.contentSize)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {
             ImmersiveView()

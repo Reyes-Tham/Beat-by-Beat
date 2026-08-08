@@ -7,10 +7,10 @@ import SwiftUI
 
 /// Shows which way to reach, as a stick figure.
 ///
-/// Drawn from **behind**, so the patient's left is the diagram's left. A
-/// front-facing figure would mirror every instruction, and "reach left" landing
-/// on the right of the picture is exactly the kind of thing that confuses
-/// someone concentrating on a movement that is already hard.
+/// Drawn facing the patient, like a therapist demonstrating opposite them, so
+/// the figure's raised arm appears on the same side of the picture as the arm
+/// they should raise — the mirror everyone already reads instinctively from
+/// exercise classes.
 ///
 /// Forward and back switch to a side profile, because depth can't be shown
 /// honestly head-on — an arm pointing at the viewer is just a shorter arm.
@@ -25,8 +25,10 @@ struct StickFigureGuide: View {
             let scale = min(size.width, size.height)
             let originX = (size.width - scale) / 2
 
+            // Mirrored: every x is flipped so the diagram reads as facing the
+            // patient rather than turned away from them.
             func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-                CGPoint(x: originX + x * scale, y: y * scale)
+                CGPoint(x: originX + (1 - x) * scale, y: y * scale)
             }
 
             let body = Color.secondary.opacity(0.55)
@@ -42,7 +44,8 @@ struct StickFigureGuide: View {
                 Path { $0.addEllipse(in: CGRect(
                     x: (head.x - 0.075) , y: head.y - 0.075,
                     width: 0.15, height: 0.15
-                ).applying(.init(scaleX: scale, y: scale)).offsetBy(dx: originX, dy: 0)) },
+                ).applying(.init(scaleX: scale, y: scale))
+                 .offsetBy(dx: originX + scale - 2 * (head.x * scale), dy: 0)) },
                 with: .color(body),
                 lineWidth: 3
             )
@@ -81,7 +84,7 @@ struct StickFigureGuide: View {
             )
 
             // Hand
-            let handRect = CGRect(x: target.x - 0.028, y: target.y - 0.028,
+            let handRect = CGRect(x: (1 - target.x) - 0.028, y: target.y - 0.028,
                                   width: 0.056, height: 0.056)
                 .applying(.init(scaleX: scale, y: scale))
                 .offsetBy(dx: originX, dy: 0)
@@ -105,13 +108,14 @@ struct StickFigureGuide: View {
                 style: StrokeStyle(lineWidth: 4, lineCap: .round)
             )
             // Arrowhead
-            let angle = atan2(arrow.dy, arrow.dx)
+            // Mirrored space, so the arrowhead's x has to flip with it.
+            let angle = atan2(arrow.dy, -arrow.dx)
             context.fill(
                 Path { path in
                     path.move(to: point(to.x, to.y))
                     for offset in [2.6, -2.6] as [CGFloat] {
                         path.addLine(to: point(
-                            to.x + cos(angle + offset) * 0.055,
+                            to.x - cos(angle + offset) * 0.055,
                             to.y + sin(angle + offset) * 0.055
                         ))
                     }

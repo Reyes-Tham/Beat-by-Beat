@@ -107,6 +107,7 @@ struct ImmersiveView: View {
         if appModel.mode == .rhythm, conductor.isRunning {
             let songTime = conductor.songTime
             appModel.songTime = songTime
+            conductor.updateFade(songTime: songTime)
 
             for due in scheduler.due(at: songTime) {
                 field.spawn(note: due.note, index: due.index)
@@ -114,6 +115,7 @@ struct ImmersiveView: View {
             field.expireOverdue(songTime: songTime)
 
             if scheduler.isFinished, field.activeTargets.isEmpty {
+                appModel.recordRun()
                 appModel.isPlaying = false
             }
         }
@@ -282,12 +284,13 @@ struct ImmersiveView: View {
     private func startOrStop() {
         guard let field else { return }
         if appModel.isPlaying {
-            // Real beat grid if one is bundled, constant-tempo grid otherwise.
-            let beatMap = BeatMap.load(resource: AudioConductor.beatMapResourceName)
+            // Real beat grid if the song ships one, constant-tempo grid otherwise.
+            let song = appModel.selectedSong
+            let beatMap = song.beatMapResource.flatMap { BeatMap.load(resource: $0) }
             let chart = beatMap.map {
                 Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand)
             } ?? Chart.generated(
-                bpm: appModel.bpm,
+                bpm: song.bpm,
                 level: appModel.level,
                 hand: appModel.trainingHand
             )
@@ -297,7 +300,7 @@ struct ImmersiveView: View {
             conductor.bpm = chart.bpm
             scheduler.load(chart)
             field.reset()
-            conductor.start()
+            conductor.start(song: song)
             appModel.audioIsPlaying = conductor.hasAudio
         } else {
             conductor.stop()

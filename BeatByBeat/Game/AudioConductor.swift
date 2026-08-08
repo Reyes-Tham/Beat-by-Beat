@@ -57,10 +57,39 @@ final class AudioConductor {
 
     // MARK: - Transport
 
+    /// Seconds of fade before the track ends. Long enough to read as the music
+    /// finishing rather than being cut off.
+    static let fadeOutSeconds: TimeInterval = 3.0
+
+    private(set) var duration: TimeInterval = 0
+    private var resourceName: String?
+
+    func start(song: Song) {
+        resourceName = song.audioResource
+        bpm = song.bpm
+        start()
+    }
+
+    /// Ramps the mix down as the end approaches. Called from the frame tick,
+    /// because song time is the only clock that knows how close the end is.
+    func updateFade(songTime: TimeInterval) {
+        guard isRunning, hasAudio, duration > 0 else { return }
+        let remaining = duration - songTime
+        guard remaining <= Self.fadeOutSeconds else {
+            engine.mainMixerNode.outputVolume = 1
+            return
+        }
+        let progress = Float(max(0, remaining) / Self.fadeOutSeconds)
+        // Squared so the drop is gentle at first and only steep at the very
+        // end — a linear ramp on amplitude reads as an abrupt dip.
+        engine.mainMixerNode.outputVolume = progress * progress
+    }
+
     func start() {
         guard !isRunning else { return }
 
-        if let file = Self.loadSong() {
+        if let file = Self.loadSong(named: resourceName) {
+            duration = Double(file.length) / file.processingFormat.sampleRate
             do {
                 try configureSession()
                 if !isGraphConnected {
@@ -68,6 +97,7 @@ final class AudioConductor {
                     engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
                     isGraphConnected = true
                 }
+                engine.mainMixerNode.outputVolume = 1
                 try engine.start()
                 player.scheduleFile(file, at: nil)
                 player.play()
@@ -77,7 +107,7 @@ final class AudioConductor {
                 hasAudio = false
             }
         } else {
-            print("[AudioConductor] no '\(Self.songResourceName)' in bundle — running silent.")
+            duration = 0
             hasAudio = false
         }
 
@@ -92,6 +122,7 @@ final class AudioConductor {
         guard isRunning else { return }
         if player.isPlaying { player.stop() }
         if engine.isRunning { engine.pause() }
+        engine.mainMixerNode.outputVolume = 1
         isRunning = false
         hasAudio = false
     }
@@ -102,12 +133,14 @@ final class AudioConductor {
         try session.setActive(true)
     }
 
-    private static func loadSong() -> AVAudioFile? {
+    private static func loadSong(named name: String?) -> AVAudioFile? {
+        guard let name else { return nil }
         for ext in ["m4a", "mp3", "wav", "aiff", "caf"] {
-            guard let url = Bundle.main.url(forResource: songResourceName, withExtension: ext)
+            guard let url = Bundle.main.url(forResource: name, withExtension: ext)
             else { continue }
             return try? AVAudioFile(forReading: url)
         }
+        print("[AudioConductor] no audio named '\(name)' — running silent.")
         return nil
     }
 }

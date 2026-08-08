@@ -25,6 +25,45 @@ class AppModel {
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
+    /// Which screen the window is showing.
+    enum Screen { case songSelection, game }
+    var screen: Screen = .songSelection
+
+    var selectedSong: Song = .default
+    /// Best previous run for the current song and level, if any.
+    var bestScore: SessionScore? {
+        ScoreStore.best(song: selectedSong.id, level: level)
+    }
+
+    func startGame() {
+        screen = .game
+        hitCount = 0
+        missedCount = 0
+        judgements = [:]
+        mode = .rhythm
+    }
+
+    func backToSongs() {
+        isPlaying = false
+        screen = .songSelection
+    }
+
+    /// Files the run that just ended. Called when the chart runs out.
+    func recordRun() {
+        guard noteCount > 0 else { return }
+        ScoreStore.record(
+            SessionScore(
+                reached: hitCount,
+                total: noteCount,
+                excellent: judgements[.excellent] ?? 0,
+                good: judgements[.good] ?? 0,
+                date: Date()
+            ),
+            song: selectedSong.id,
+            level: level
+        )
+    }
+
     // MARK: - Session config
 
     var mode: FieldMode = .practice
