@@ -128,6 +128,13 @@ struct SongSelectionView: View {
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
+            Button { appModel.screen = .statistics } label: {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.title2)
+            }
+            .buttonStyle(.borderless)
+            .help("Past sessions")
+
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .font(.title2)

@@ -35,6 +35,8 @@ struct ContentView: View {
                 SongSelectionView(showSettings: $showSettings)
             case .calibration:
                 CalibrationScreen()
+            case .statistics:
+                StatisticsView()
             case .countdown:
                 CountdownView(songTitle: appModel.selectedSong.title) {
                     appModel.countdownFinished()

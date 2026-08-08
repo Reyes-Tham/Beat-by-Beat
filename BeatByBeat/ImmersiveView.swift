@@ -14,6 +14,7 @@ struct ImmersiveView: View {
     @State private var conductor = AudioConductor()
     @State private var scheduler = BeatScheduler()
     @State private var calibration = CalibrationManager()
+    @State private var recorder = SessionRecorder()
     @State private var field: TargetField?
     @State private var proxyMarkers: [TrainingHand: Entity] = [:]
     @State private var confirmRoot = Entity()
@@ -38,6 +39,12 @@ struct ImmersiveView: View {
 
             let field = TargetField(root: root)
             field.onScoreChange = { publishScore(field) }
+            field.onReached = { component in
+                recorder.noteReached(index: component.noteIndex, songTime: conductor.songTime)
+            }
+            field.onMissed = { component in
+                recorder.noteMissed(index: component.noteIndex)
+            }
             self.field = field
 
             discoRoot.name = "Disco"
@@ -134,11 +141,29 @@ struct ImmersiveView: View {
 
             for due in scheduler.due(at: songTime) {
                 field.spawn(note: due.note, index: due.index)
+                recorder.noteSpawned(
+                    index: due.index,
+                    unit: due.note.unit,
+                    hand: due.note.hand,
+                    songTime: songTime
+                )
             }
+            recorder.observe(hand: handTracking.proxy(for: appModel.trainingHand)?.position)
             field.expireOverdue(songTime: songTime)
 
             if scheduler.isFinished, field.activeTargets.isEmpty {
                 appModel.recordRun()
+                // Filed before isPlaying flips, so the summary the results
+                // screen shows and the record the history keeps agree.
+                if let session = recorder.finish(
+                    songTitle: appModel.selectedSong.title,
+                    level: appModel.level,
+                    hand: appModel.trainingHand,
+                    calibratedSize: appModel.volume.size,
+                    points: appModel.livePoints
+                ) {
+                    PatientStore.addSession(session)
+                }
                 appModel.isPlaying = false
             }
         }
@@ -234,6 +259,9 @@ struct ImmersiveView: View {
             // Sliders now show the patient's real numbers, so a later
             // adjustment is a nudge rather than another capture.
             appModel.seedManualFromCalibration()
+            // Kept as history: a workspace is far more informative compared
+            // against what it was than read on its own.
+            PatientStore.addCalibration(profile)
             clearCalibrationScene()
             configure()
             if appModel.screen == .calibration { appModel.screen = .songSelection }
@@ -395,6 +423,7 @@ struct ImmersiveView: View {
             appModel.bpm = chart.bpm
             conductor.bpm = chart.bpm
             scheduler.load(chart)
+            recorder.begin()
             field.reset()
             conductor.start(song: song)
             appModel.audioIsPlaying = conductor.hasAudio

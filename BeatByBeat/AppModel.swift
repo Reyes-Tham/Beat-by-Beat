@@ -26,7 +26,7 @@ class AppModel {
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
     /// Which screen the window is showing.
-    enum Screen { case songSelection, calibration, countdown, game, results }
+    enum Screen { case songSelection, calibration, statistics, countdown, game, results }
     /// Launches into calibration. Reach varies between sessions, so a profile
     /// from yesterday is a starting point rather than a measurement of today —
     /// and a stale envelope silently places every target in the wrong place.

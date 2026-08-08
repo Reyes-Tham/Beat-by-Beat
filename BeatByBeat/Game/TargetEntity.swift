@@ -27,6 +27,8 @@ struct TargetComponent: Component {
     var radius: Float
     /// Index into the chart. -1 for practice targets with no beat.
     var noteIndex: Int = -1
+    /// Where in the workspace this target sits, for the session record.
+    var unit: SIMD3<Float> = .zero
     /// Song time this target should be contacted at. Nil in practice mode.
     var beatTime: TimeInterval?
     /// How long the player was given to reach it, for scaling the timing window.

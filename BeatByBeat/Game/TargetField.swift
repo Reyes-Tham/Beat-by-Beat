@@ -50,6 +50,9 @@ final class TargetField {
     private(set) var judgements: [Judgement: Int] = [:]
     /// Called after any scoring change so the UI can update.
     var onScoreChange: (() -> Void)?
+    /// Per-target outcomes, for the session record.
+    var onReached: ((TargetComponent) -> Void)?
+    var onMissed: ((TargetComponent) -> Void)?
     /// Ding played on contact. Nil until the resource finishes loading.
     var hitSound: AudioFileResource?
     /// Chime played where a target appears, so it can be located by ear before
@@ -133,7 +136,8 @@ final class TargetField {
         beatTime: TimeInterval? = nil,
         travelTime: TimeInterval = 1,
         movement: MovementType = .reach,
-        gripOrientation: GripOrientation? = nil
+        gripOrientation: GripOrientation? = nil,
+        unit: SIMD3<Float> = .zero
     ) -> Entity {
         let target = TargetEntity.make(
             hand: hand, radius: radius, noteIndex: noteIndex,
@@ -142,6 +146,7 @@ final class TargetField {
         target.position = position
         target.components[TargetComponent.self]?.beatTime = beatTime
         target.components[TargetComponent.self]?.travelTime = travelTime
+        target.components[TargetComponent.self]?.unit = unit
         root.addChild(target)
         TargetEntity.playSpawnAnimation(on: target)
         if beatTime != nil {
@@ -202,7 +207,8 @@ final class TargetField {
             beatTime: note.time,
             travelTime: note.travel,
             movement: note.movement,
-            gripOrientation: note.gripOrientation
+            gripOrientation: note.gripOrientation,
+            unit: note.unit
         )
     }
 
@@ -222,6 +228,7 @@ final class TargetField {
             target.components.remove(TargetComponent.self)
             target.components.remove(CollisionComponent.self)
             missedCount += 1
+            onMissed?(component)
             onScoreChange?()
 
             // Stop the countdown too, or the shell keeps shrinking on a target
@@ -349,6 +356,7 @@ final class TargetField {
             judgements[judgement, default: 0] += 1
             showPraise(judgement, at: target.position)
         }
+        onReached?(component)
         onScoreChange?()
 
         TargetEntity.removeApproachShell(from: target)
