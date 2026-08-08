@@ -151,14 +151,16 @@ struct ImmersiveView: View {
 
         let head = handTracking.deviceTransform()
 
-        // Circle is pinned once per arm, low and central, so a downward glance
-        // confirms and a forward reach doesn't.
+        // Pinned once per arm, just below eye line — about 18° down rather
+        // than the 42° an earlier version needed, so confirming is a glance
+        // and not a neck movement. What keeps that safe is the stillness gate
+        // in updateDwell, not distance from where they're looking.
         if calibration.confirmCircle == nil, let head {
             let position = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
             var forward = -SIMD3<Float>(head.columns.2.x, head.columns.2.y, head.columns.2.z)
             forward.y = 0
             forward = length(forward) < 1e-4 ? [0, 0, -1] : normalize(forward)
-            calibration.placeConfirmCircle(at: position + forward * 0.45 + [0, -0.40, 0])
+            calibration.placeConfirmCircle(at: position + forward * 0.55 + [0, -0.18, 0])
             showConfirmCircle()
         }
 
@@ -243,6 +245,7 @@ struct ImmersiveView: View {
         appModel.calibrationAwaitingHand = calibration.awaitingHand
         appModel.calibrationDwell = calibration.dwellProgress
         appModel.calibrationCanConfirm = calibration.canConfirm
+        appModel.calibrationHandSteady = calibration.isHandSteady
         let span = calibration.currentSpan
         appModel.calibrationSpan = span
     }

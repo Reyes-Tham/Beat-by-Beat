@@ -150,6 +150,8 @@ class AppModel {
     /// 0...1 while the head is held toward the confirm circle.
     var calibrationDwell: Float = 0
     var calibrationCanConfirm = false
+    /// Whether the arm has stopped moving — the second gate on confirming.
+    var calibrationHandSteady = false
     /// Reach captured so far for the current arm, in metres.
     var calibrationSpan: SIMD3<Float> = .zero
     private(set) var calibrationRequests = 0

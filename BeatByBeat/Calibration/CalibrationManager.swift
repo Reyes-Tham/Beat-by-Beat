@@ -53,6 +53,13 @@ final class CalibrationManager {
     private var lostThisHand = false
     private var speeds: [Float] = []
     private var lastSample: (position: SIMD3<Float>, time: TimeInterval)?
+    /// Smoothed hand speed, used to tell "finished reaching" from "mid-sweep".
+    private var recentSpeed: Float = 0
+
+    /// Hand is roughly parked. Generous enough to allow tremor and the small
+    /// drift of holding a position, strict enough to exclude an arm still
+    /// sweeping through its range (typically 0.2–0.4 m/s).
+    var isHandSteady: Bool { recentSpeed < 0.12 }
     private var safetyScale: Float = 0.85
     private var sessionHand: TrainingHand = .both
 
@@ -144,7 +151,9 @@ final class CalibrationManager {
         if let last = lastSample {
             let dt = now - last.time
             if dt > 0.005, dt < 0.5 {
-                speeds.append(Float(Double(distance(palm, last.position)) / dt))
+                let speed = Float(Double(distance(palm, last.position)) / dt)
+                speeds.append(speed)
+                recentSpeed += (speed - recentSpeed) * 0.12
             }
         }
         lastSample = (palm, now)
@@ -157,7 +166,11 @@ final class CalibrationManager {
     func updateDwell(isLooking: Bool, deltaTime: TimeInterval) {
         guard phase == .capturing else { return }
 
-        guard isLooking, canConfirm else {
+        // Stillness is what lets the circle sit close to head-forward. The
+        // patient has to have *stopped* reaching, so glancing toward it
+        // mid-sweep can't confirm — which means the circle no longer has to be
+        // parked far enough down to be out of the way on geometry alone.
+        guard isLooking, canConfirm, isHandSteady else {
             // Decays rather than resetting, so a blink or a small head drift
             // doesn't throw away two seconds of holding still.
             dwellProgress = max(0, dwellProgress - Float(deltaTime / Self.dwellDuration) * 1.5)

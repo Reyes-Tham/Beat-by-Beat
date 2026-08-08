@@ -108,8 +108,8 @@ struct ContentView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("When you're done, turn your head to the circle below and "
-                     + "hold it there for 3 seconds.")
+                Text("When you're done, rest your arm and glance at the circle "
+                     + "for 3 seconds.")
                     .font(.callout)
 
                 ProgressView(value: Double(appModel.calibrationDwell))
@@ -117,6 +117,10 @@ struct ContentView: View {
 
                 if !appModel.calibrationCanConfirm {
                     Text("Move your arm around a little more first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !appModel.calibrationHandSteady {
+                    Text("Rest your arm — it still needs to come to a stop.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -209,7 +213,7 @@ struct ContentView: View {
                     .disabled(!appModel.calibrationCanConfirm)
                 Button("Cancel") { appModel.cancelCalibration() }
                 Spacer()
-                Text("or hold your head on the circle")
+                Text("or rest your arm and glance at the circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

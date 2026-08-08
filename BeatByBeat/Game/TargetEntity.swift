@@ -43,6 +43,10 @@ enum TargetEntity {
         sphere.name = "Core"
         root.addChild(sphere)
 
+        if let letter = handLetter(hand, radius: radius) {
+            root.addChild(letter)
+        }
+
         // Present from the start so palm-proxy contact is a plain
         // CollisionComponent query later, not a mesh walk.
         root.components.set(CollisionComponent(
@@ -51,6 +55,45 @@ enum TargetEntity {
         ))
         root.components.set(TargetComponent(hand: hand, radius: radius, noteIndex: noteIndex))
 
+        return root
+    }
+
+    /// "L" or "R" sitting on the face of the target.
+    ///
+    /// Says which arm outright rather than relying on colour alone, which is
+    /// the plan's §17 requirement — and unlike the pips it was carrying before,
+    /// a letter is unambiguous at a glance and doesn't read as clutter.
+    ///
+    /// Offset toward the player (+Z) so it clears the opaque sphere, and
+    /// billboarded so it stays square-on as they move.
+    private static func handLetter(_ hand: TrainingHand, radius: Float) -> Entity? {
+        let glyph: String
+        switch hand {
+        case .left: glyph = "L"
+        case .right: glyph = "R"
+        case .both: return nil
+        }
+
+        let root = Entity()
+        root.name = "HandLetter"
+        root.position = [0, 0, radius + 0.008]
+
+        let mesh = MeshResource.generateText(
+            glyph,
+            extrusionDepth: 0.001,
+            font: .systemFont(ofSize: CGFloat(radius) * 1.1, weight: .bold),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byTruncatingTail
+        )
+        let text = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: .white)])
+        // generateText lays out from the baseline's left edge, so the glyph has
+        // to be shifted back onto the anchor to sit centred on the sphere.
+        let bounds = text.visualBounds(relativeTo: nil)
+        text.position = -bounds.center
+        root.addChild(text)
+
+        root.components.set(BillboardComponent())
         return root
     }
 

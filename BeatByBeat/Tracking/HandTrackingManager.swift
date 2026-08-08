@@ -7,11 +7,13 @@ import ARKit
 import QuartzCore
 import RealityKit
 
-/// A forgiving stand-in for the hand: a sphere at the centre of the palm.
+/// A forgiving stand-in for the hand: a sphere at the wrist.
 ///
-/// Palm, not fingertip, on purpose — a stroke patient may not fully extend
-/// their index finger, and the therapeutic goal is bringing the hand to the
-/// target, not pointing at it.
+/// Wrist, not fingertip and not palm centre. A stroke patient may hold the
+/// hand flexed or clenched, which moves a palm estimate around without the arm
+/// having gone anywhere; the wrist is a stable joint and is the usual endpoint
+/// for measuring reach. Calibration and gameplay both use it, so the envelope
+/// is measured in the same coordinates it is later tested in.
 struct HandProxy {
     /// Generous on purpose — contact should be forgiving, and this is the main
     /// dial for how easy a target is to reach. Tune on device.
@@ -145,22 +147,16 @@ final class HandTrackingManager {
         }
     }
 
-    /// Palm centre, approximated as the midpoint between the wrist and the
-    /// knuckle of the middle finger.
+    /// Wrist position in world space.
     private static func palmProxy(from anchor: HandAnchor) -> HandProxy? {
         guard let skeleton = anchor.handSkeleton else { return nil }
 
         let wrist = skeleton.joint(.wrist)
-        let knuckle = skeleton.joint(.middleFingerKnuckle)
-        guard wrist.isTracked, knuckle.isTracked else { return nil }
+        guard wrist.isTracked else { return nil }
 
-        let toWorld = { (joint: HandSkeleton.Joint) -> SIMD3<Float> in
-            let world = anchor.originFromAnchorTransform * joint.anchorFromJointTransform
-            return SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z)
-        }
-
+        let world = anchor.originFromAnchorTransform * wrist.anchorFromJointTransform
         return HandProxy(
-            position: (toWorld(wrist) + toWorld(knuckle)) / 2,
+            position: SIMD3(world.columns.3.x, world.columns.3.y, world.columns.3.z),
             updatedAt: anchor.timestamp
         )
     }
