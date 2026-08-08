@@ -22,6 +22,9 @@ struct TargetComponent: Component {
     /// closing hand now counts. Without this the target scores off whatever
     /// the hand happened to already be doing when it arrived.
     var gripArmed: Bool = false
+    /// Consecutive frames the hand has held the pose being waited for. Hand
+    /// tracking is noisy enough that a single frame is not evidence.
+    var gripFrames: Int = 0
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float

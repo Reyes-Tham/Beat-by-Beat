@@ -383,9 +383,10 @@ struct ImmersiveView: View {
                 radius: HandProxy.simulatedRadius,
                 updatedAt: 0,
                 // No fingers to close in the Simulator, so the stand-in
-                // alternates open and shut on a slow cycle. That way the
-                // open-then-close sequence can still be exercised there.
-                gripClosure: fmod(CACurrentMediaTime(), 2.0) < 1.0 ? 0 : 1
+                // reports whatever the panel's grip toggle says.
+                openness: appModel.simulatedGripClosed
+                    ? HandProxy.closedRatio
+                    : HandProxy.openRatio
             )
             // One mouse can't have two chiralities: when a specific hand is
             // being trained it takes that side, and only with Both does it

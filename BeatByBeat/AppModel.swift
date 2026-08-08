@@ -132,6 +132,11 @@ class AppModel {
     var simulatedPalmUnit: SIMD3<Float>?
     /// Depth of the fake palm. Needs its own control: the pad only has two
     /// axes, and a palm pinned to mid-depth can't reach the volume's faces.
+    /// Simulator only: whether the fake hand is closed. A toggle rather than a
+    /// timer, so the open-then-close sequence is driven deliberately instead of
+    /// happening on its own.
+    var simulatedGripClosed = false
+
     var simulatedPalmDepth: Float = 0.75 {
         didSet { simulatedPalmUnit?.z = simulatedPalmDepth }
     }

@@ -32,10 +32,14 @@ struct HandProxy {
     /// contact feels — that's `defaultRadius`, and only on device.
     static let simulatedRadius: Float = 0.085
 
-    /// Thumb-to-index distance under which the hand counts as closed.
-    /// Generous: a hemiparetic hand often can't fully oppose, and the point is
-    /// to train the attempt, not to measure pinch precision.
-    static let gripThreshold: Float = 0.045
+    /// Hand openness, as mean fingertip-to-wrist distance over hand length.
+    /// An open hand sits near 1.9; a closed fist near 1.1.
+    ///
+    /// A ratio rather than a raw distance so it works across hand sizes, and
+    /// whole-hand curl rather than a thumb-to-index pinch because the movement
+    /// being trained is closing around a mug, not pinching at one.
+    static let openRatio: Float = 1.65
+    static let closedRatio: Float = 1.35
 
     /// Wrist. Where the *arm* got to, which is what reaching measures.
     var position: SIMD3<Float>
@@ -47,16 +51,28 @@ struct HandProxy {
     var gripPosition: SIMD3<Float>
     var radius: Float = HandProxy.defaultRadius
     var updatedAt: TimeInterval
-    /// How closed the hand is, 0 open … 1 shut.
-    var gripClosure: Float = 0
+    /// Mean fingertip-to-wrist distance over hand length. **Nil when the hand
+    /// pose isn't known**, which is not the same as open — reporting unknown as
+    /// open is what let a closed fist arm a grip target, since ARKit loses the
+    /// fingertips exactly when the hand closes.
+    var openness: Float?
     /// Direction the palm faces, in world space. Zero when unknown.
     var palmNormal: SIMD3<Float> = .zero
 
-    var isGripping: Bool { gripClosure >= 1 }
-    /// Hand clearly open. The gap between this and `isGripping` is deliberate:
-    /// a grip has to be a *movement* from one to the other, not a hand that
-    /// drifted across a single threshold.
-    var isOpen: Bool { gripClosure <= 0.25 }
+    /// Whether the hand pose is known at all.
+    var handKnown: Bool { openness != nil }
+
+    /// Both are false when the pose is unknown. The dead band between them is
+    /// deliberate: a grip has to be a *movement* from one to the other, not a
+    /// hand that drifted across a single threshold.
+    var isGripping: Bool {
+        guard let openness else { return false }
+        return openness <= HandProxy.closedRatio
+    }
+    var isOpen: Bool {
+        guard let openness else { return false }
+        return openness >= HandProxy.openRatio
+    }
 }
 
 /// Streams palm positions from ARKit.
@@ -183,7 +199,7 @@ final class HandTrackingManager {
             position: wristPosition,
             gripPosition: graspPoint(of: skeleton, anchor: anchor) ?? wristPosition,
             updatedAt: anchor.timestamp,
-            gripClosure: closure(of: skeleton),
+            openness: openness(of: skeleton),
             palmNormal: palmNormal(of: skeleton, anchor: anchor) ?? .zero
         )
     }
@@ -231,20 +247,36 @@ final class HandTrackingManager {
         return normalize(normal) * sign
     }
 
-    /// Thumb tip to index tip, mapped to 0…1. Nil-safe: an untracked fingertip
-    /// reports open rather than closed, so a tracking gap can never look like
-    /// a successful grip.
-    private static func closure(of skeleton: HandSkeleton) -> Float {
-        let thumb = skeleton.joint(.thumbTip)
-        let index = skeleton.joint(.indexFingerTip)
-        guard thumb.isTracked, index.isTracked else { return 0 }
+    /// How open the hand is: mean fingertip-to-wrist distance divided by hand
+    /// length. Nil when too little of the hand is tracked to say.
+    ///
+    /// Averaged over whichever fingertips are visible rather than demanding
+    /// all four, so one occluded finger degrades the reading instead of
+    /// discarding it — but two are required, because a single tip is as likely
+    /// to be a tracking artefact as a pose.
+    private static func openness(of skeleton: HandSkeleton) -> Float? {
+        let wrist = skeleton.joint(.wrist)
+        let knuckle = skeleton.joint(.middleFingerKnuckle)
+        guard wrist.isTracked, knuckle.isTracked else { return nil }
 
-        let a = thumb.anchorFromJointTransform.columns.3
-        let b = index.anchorFromJointTransform.columns.3
-        let gap = distance(SIMD3(a.x, a.y, a.z), SIMD3(b.x, b.y, b.z))
+        func local(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
+            let c = joint.anchorFromJointTransform.columns.3
+            return SIMD3(c.x, c.y, c.z)
+        }
 
-        let open: Float = 0.11
-        let shut = HandProxy.gripThreshold
-        return min(1, max(0, (open - gap) / (open - shut)))
+        let origin = local(wrist)
+        let handLength = distance(local(knuckle), origin)
+        guard handLength > 0.02 else { return nil }
+
+        let tips: [HandSkeleton.JointName] = [
+            .indexFingerTip, .middleFingerTip, .ringFingerTip, .littleFingerTip
+        ]
+        let reach = tips
+            .map { skeleton.joint($0) }
+            .filter(\.isTracked)
+            .map { distance(local($0), origin) }
+
+        guard reach.count >= 2 else { return nil }
+        return (reach.reduce(0, +) / Float(reach.count)) / handLength
     }
 }

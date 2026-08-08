@@ -208,6 +208,8 @@ struct HandPad: View {
             Text("Hand depth: \(Int(appModel.simulatedPalmDepth * 100))% forward")
                 .font(.caption)
             Slider(value: $appModel.simulatedPalmDepth, in: 0...1)
+            Toggle("Hand closed", isOn: $appModel.simulatedGripClosed)
+                .font(.caption)
         }
     }
 }

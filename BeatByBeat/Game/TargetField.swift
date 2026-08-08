@@ -288,24 +288,55 @@ final class TargetField {
         // Grasp point, not the wrist: the object has to be *in the hand*.
         let inHand = distance(palm.proxy.gripPosition, target.position)
             <= palm.proxy.radius + component.radius
-        let turned = component.gripOrientation.map {
-            $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
-        } ?? true
-        guard inHand, turned else { return }
 
-        if !component.gripArmed {
-            guard palm.proxy.isOpen else { return }
-            var armed = component
-            armed.gripArmed = true
-            target.components.set(armed)
-            TargetEntity.setGripArmed(target, armed: true, hand: component.hand)
+        // Leaving disarms. Otherwise a hand could open here, wander off, and
+        // come back already closed — which is not grasping anything.
+        guard inHand else {
+            if component.gripArmed || component.gripFrames > 0 {
+                var reset = component
+                reset.gripArmed = false
+                reset.gripFrames = 0
+                target.components.set(reset)
+                TargetEntity.setGripArmed(target, armed: false, hand: component.hand)
+            }
             return
         }
 
-        if palm.proxy.isGripping {
+        // An unknown pose is not an open hand. ARKit drops the fingertips
+        // exactly when the hand closes, so treating unknown as open let a
+        // closed fist arm the target on arrival.
+        guard palm.proxy.handKnown else { return }
+
+        let turned = component.gripOrientation.map {
+            $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
+        } ?? true
+        guard turned else { return }
+
+        var state = component
+        if !state.gripArmed {
+            // Open, held: the hand has to actually be open at the mug before
+            // closing on it counts.
+            state.gripFrames = palm.proxy.isOpen ? state.gripFrames + 1 : 0
+            if state.gripFrames >= Self.gripHoldFrames {
+                state.gripArmed = true
+                state.gripFrames = 0
+                TargetEntity.setGripArmed(target, armed: true, hand: component.hand)
+            }
+            target.components.set(state)
+            return
+        }
+
+        state.gripFrames = palm.proxy.isGripping ? state.gripFrames + 1 : 0
+        target.components.set(state)
+        if state.gripFrames >= Self.gripHoldFrames {
             retire(target, component: component, songTime: songTime)
         }
     }
+
+    /// Frames a grip pose must persist before it counts. Hand updates arrive at
+    /// roughly 90 Hz, so this is about 40 ms — enough to reject a single noisy
+    /// frame without being felt.
+    private static let gripHoldFrames = 4
 
     /// Walks the hand through a pour's waypoints, in order.
     ///
