@@ -58,25 +58,12 @@ struct SongSelectionView: View {
 
             Divider()
 
-            HStack {
-                Spacer()
-                if appModel.calibration == nil {
-                    // Calibration gates play rather than sitting in settings.
-                    // Without it every target would be placed against a guessed
-                    // workspace, which is the one thing this app exists not to do.
-                    VStack(spacing: 6) {
-                        Button {
-                            appModel.startCalibration()
-                        } label: {
-                            Label("Calibrate to begin", systemImage: "figure.arms.open")
-                                .frame(minWidth: 200)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Text("Takes about a minute. Targets are placed inside your own reach.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
+            VStack(spacing: 8) {
+                HStack(spacing: 14) {
+                    Spacer()
+                    // Play is always available. Calibration is strongly
+                    // preferred, but gating on it meant skipping left the app
+                    // unusable — and it has to be testable without a headset.
                     Button {
                         appModel.selectedSong = song
                         Task {
@@ -91,8 +78,19 @@ struct SongSelectionView: View {
                             .frame(minWidth: 130)
                     }
                     .buttonStyle(.borderedProminent)
+
+                    Button {
+                        appModel.startCalibration()
+                    } label: {
+                        Label(appModel.calibration == nil ? "Calibrate" : "Recalibrate",
+                              systemImage: "figure.arms.open")
+                    }
+                    Spacer()
                 }
-                Spacer()
+
+                Text(workspaceSource)
+                    .font(.caption)
+                    .foregroundStyle(appModel.isUsingCalibration ? Color.secondary : Color.orange)
             }
             .padding(.vertical, 18)
         }
@@ -101,6 +99,16 @@ struct SongSelectionView: View {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
         .onChange(of: selectedIndex) { appModel.selectedSong = song }
+    }
+
+    /// Says which boundary targets will be placed in, since "measured" and
+    /// "set by hand" play very differently and the difference is invisible
+    /// once the song starts.
+    private var workspaceSource: String {
+        guard appModel.isUsingCalibration else {
+            return "Using the manual workspace — set it in Settings, or calibrate for a measured one."
+        }
+        return "Using your measured reach."
     }
 
     // MARK: - Header

@@ -178,53 +178,73 @@ class AppModel {
     static let hasBundledBeatMap: Bool =
         Bundle.main.url(forResource: AudioConductor.beatMapResourceName, withExtension: "json") != nil
 
-    /// Height of the volume centre above the floor.
-    var centerHeight: Float = SpawnVolume.fixed.center.y
-    /// Distance of the volume centre in front of the player.
-    var centerDistance: Float = -SpawnVolume.fixed.center.z
-    /// Scales width and height together; depth stays fixed.
-    var spread: Float = 1.0
+    /// Hand-set boxes, one per arm. Seeded from a calibration when there is
+    /// one, so the sliders always show the numbers actually in use.
+    var manualWorkspaces: [String: ManualWorkspace] = ManualWorkspace.loadAll() {
+        didSet { ManualWorkspace.saveAll(manualWorkspaces) }
+    }
 
-    /// Volume set by hand. Stays available as the therapist override, and as
-    /// the fallback if a capture fails during a demo — a live demo should
-    /// never have calibration as a single point of failure.
+    func manualWorkspace(for hand: TrainingHand) -> ManualWorkspace {
+        manualWorkspaces[hand.rawValue] ?? .default(for: hand)
+    }
+
+    func setManualWorkspace(_ workspace: ManualWorkspace, for hand: TrainingHand) {
+        manualWorkspaces[hand.rawValue] = workspace
+    }
+
+    /// Union of the hand-set boxes, for anything needing one volume.
     var manualVolume: SpawnVolume {
-        let base = SpawnVolume.fixed
-        return SpawnVolume(
-            center: [0, centerHeight, -centerDistance],
-            size: [base.size.x * spread, base.size.y * spread, base.size.z]
-        )
+        let boxes = [TrainingHand.left, .right].map { manualWorkspace(for: $0).volume }
+        var lo = boxes[0].minBound
+        var hi = boxes[0].maxBound
+        for box in boxes.dropFirst() {
+            lo = simd_min(lo, box.minBound)
+            hi = simd_max(hi, box.maxBound)
+        }
+        return SpawnVolume(center: (lo + hi) / 2, size: hi - lo)
     }
 
     /// Calibration result, when there is one.
     var calibration: CalibrationProfile? {
         didSet { calibration?.save() }
     }
-    /// Lets the therapist fall back to the sliders without discarding a
-    /// capture.
+
+    /// Prefer the measured boundary over the hand-set one. Turning it off lets
+    /// a nurse work from the sliders without discarding the capture.
     var useCalibration = true
 
     var isUsingCalibration: Bool { useCalibration && calibration != nil }
 
-    /// What gameplay uses for a given arm.
+    /// Copies measured boundaries into the sliders.
     ///
-    /// Per-arm because hemiparesis is asymmetric: the affected arm's workspace
-    /// can be a fraction of the other's, and one shared box would put targets
-    /// out of reach on one side and make them trivial on the other.
-    func volume(for hand: TrainingHand) -> SpawnVolume {
-        guard isUsingCalibration,
-              let calibrated = calibration?.volume(for: hand)
-        else { return manualVolume }
-        return calibrated
+    /// Run automatically when a capture finishes, so the manual controls start
+    /// from the patient's real numbers rather than from defaults — which is
+    /// what makes adjusting one afterwards a nudge instead of a fresh capture.
+    func seedManualFromCalibration() {
+        guard let calibration else { return }
+        for hand in [TrainingHand.left, .right] {
+            guard let volume = calibration.volume(for: hand) else { continue }
+            manualWorkspaces[hand.rawValue] = ManualWorkspace(volume)
+        }
     }
 
-    /// Union of both arms, for the outline and for anything that needs one box.
+    /// What gameplay uses for a given arm.
+    ///
+    /// Measured first, hand-set as the fallback. There is always a workspace,
+    /// which is what lets calibration be skipped and the app still be played —
+    /// on a headset or, with the simulated hand, without one.
+    func volume(for hand: TrainingHand) -> SpawnVolume {
+        if isUsingCalibration, let calibrated = calibration?.volume(for: hand) {
+            return calibrated
+        }
+        return manualWorkspace(for: hand).volume
+    }
+
+    /// Union of both arms, for the outline and for practice layout.
     var volume: SpawnVolume {
-        guard isUsingCalibration, let calibration else { return manualVolume }
-        let boxes = [TrainingHand.left, .right].compactMap { calibration.volume(for: $0) }
-        guard let first = boxes.first else { return manualVolume }
-        var lo = first.minBound
-        var hi = first.maxBound
+        let boxes = [TrainingHand.left, .right].map { volume(for: $0) }
+        var lo = boxes[0].minBound
+        var hi = boxes[0].maxBound
         for box in boxes.dropFirst() {
             lo = simd_min(lo, box.minBound)
             hi = simd_max(hi, box.maxBound)

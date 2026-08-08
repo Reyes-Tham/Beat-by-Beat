@@ -110,9 +110,7 @@ struct ImmersiveView: View {
         .onChange(of: appModel.targetCount) { configure() }
         // Volume tweaks re-aim future spawns without disturbing live targets,
         // so they stay usable while a song is running.
-        .onChange(of: appModel.centerHeight) { applySettings() }
-        .onChange(of: appModel.centerDistance) { applySettings() }
-        .onChange(of: appModel.spread) { applySettings() }
+        .onChange(of: appModel.manualWorkspaces) { applySettings() }
         .onChange(of: appModel.showOutline) {
             field?.outlineIsVisible = appModel.showOutline
         }
@@ -233,6 +231,9 @@ struct ImmersiveView: View {
         if calibration.phase == .finished, let profile = calibration.profile {
             appModel.calibration = profile
             appModel.useCalibration = true
+            // Sliders now show the patient's real numbers, so a later
+            // adjustment is a nudge rather than another capture.
+            appModel.seedManualFromCalibration()
             clearCalibrationScene()
             configure()
             if appModel.screen == .calibration { appModel.screen = .songSelection }

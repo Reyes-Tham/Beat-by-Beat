@@ -12,6 +12,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
+    @State private var editingArm: TrainingHand = .right
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -23,20 +24,7 @@ struct SettingsView: View {
 
                     Divider()
 
-                    section("Manual workspace") {
-                        if appModel.isUsingCalibration {
-                            Text("A calibration is in use — these apply when it's "
-                                 + "switched off.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        slider("Height", value: $appModel.centerHeight,
-                               range: 0.70...1.70, unit: "cm")
-                        slider("Distance", value: $appModel.centerDistance,
-                               range: 0.25...1.00, unit: "cm")
-                        slider("Spread", value: $appModel.spread,
-                               range: 0.4...2.0, unit: "×")
-                    }
+                    manualSection
 
                     Divider()
 
@@ -81,13 +69,104 @@ struct SettingsView: View {
         .frame(width: 520, height: 640)
     }
 
+    /// Per-arm box editor.
+    ///
+    /// One arm at a time: six sliders twice over is a wall, and a therapist is
+    /// only ever adjusting the arm in front of them.
+    @ViewBuilder
+    private var manualSection: some View {
+        @Bindable var appModel = appModel
+        let workspace = appModel.manualWorkspace(for: editingArm)
+
+        section("Manual workspace") {
+            if appModel.isUsingCalibration {
+                Text("A measured calibration is in use. These sliders drive the "
+                     + "game when \"Use measured calibration\" is switched off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("These sliders are driving the game.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("Arm", selection: $editingArm) {
+                Text("Left").tag(TrainingHand.left)
+                Text("Right").tag(TrainingHand.right)
+            }
+            .pickerStyle(.segmented)
+
+            Text("Centre")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            armSlider("Height", value: workspace.center.y, range: 0.70...1.70,
+                      onChange: update { $0.center.y = $1 })
+            armSlider("Distance", value: -workspace.center.z, range: 0.25...1.00,
+                      onChange: update { $0.center.z = -$1 })
+            armSlider("Sideways", value: workspace.center.x, range: -0.60...0.60,
+                      onChange: update { $0.center.x = $1 })
+
+            Text("Size")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            armSlider("Width", value: workspace.size.x, range: 0.15...1.20,
+                      onChange: update { $0.size.x = $1 })
+            armSlider("Height", value: workspace.size.y, range: 0.15...1.20,
+                      onChange: update { $0.size.y = $1 })
+            armSlider("Depth", value: workspace.size.z, range: 0.10...0.70,
+                      onChange: update { $0.size.z = $1 })
+
+            if appModel.calibration != nil {
+                Button("Copy measured values into these sliders") {
+                    appModel.seedManualFromCalibration()
+                }
+            }
+            Button("Reset this arm to defaults") {
+                appModel.setManualWorkspace(.default(for: editingArm), for: editingArm)
+            }
+        }
+    }
+
+    /// Sliders write through a closure rather than binding directly, since the
+    /// value lives inside a dictionary on the model.
+    private func update(
+        _ change: @escaping (inout ManualWorkspace, Float) -> Void
+    ) -> (Float) -> Void {
+        { newValue in
+            var workspace = appModel.manualWorkspace(for: editingArm)
+            change(&workspace, newValue)
+            appModel.setManualWorkspace(workspace, for: editingArm)
+        }
+    }
+
+    @ViewBuilder
+    private func armSlider(
+        _ title: String,
+        value: Float,
+        range: ClosedRange<Float>,
+        onChange: @escaping (Float) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(title): \(Int(value * 100)) cm")
+                .font(.callout)
+                .monospacedDigit()
+            Slider(
+                value: Binding(get: { value }, set: onChange),
+                in: range
+            )
+        }
+    }
+
     @ViewBuilder
     private var calibrationSection: some View {
         @Bindable var appModel = appModel
 
         section("Calibration") {
             if let profile = appModel.calibration {
-                Toggle("Use calibrated workspace", isOn: $appModel.useCalibration)
+                Toggle("Use measured calibration", isOn: $appModel.useCalibration)
+                Text("On, the measured boundary wins. Off, the sliders below do.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 // One row per arm: the two boundaries are separate, and seeing
                 // how far apart they are is the point of measuring them apart.
