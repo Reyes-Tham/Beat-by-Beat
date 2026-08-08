@@ -64,6 +64,14 @@ struct CalibrationScreen: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!appModel.calibrationIsConfirming && !appModel.calibrationCanConfirm)
 
+                // Whole arm, not the last direction: a reach that came out
+                // wrong usually means the patient had misread the instruction
+                // or shifted in their seat, which makes its neighbours suspect
+                // too. Arms already locked are kept.
+                Button("Redo arm") {
+                    appModel.redoCalibrationArm()
+                }
+
                 Button(appModel.calibration == nil ? "Skip for now" : "Cancel") {
                     appModel.cancelCalibration()
                 }

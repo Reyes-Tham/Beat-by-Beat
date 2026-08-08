@@ -131,7 +131,20 @@ struct ImmersiveView: View {
         .onChange(of: appModel.isPlaying) { startOrStop() }
         .onChange(of: appModel.calibrationRequests) { beginCalibration() }
         .onChange(of: appModel.calibrationCancelRequests) { cancelCalibration() }
-        .onChange(of: appModel.calibrationAdvanceRequests) { calibration.acceptNow() }
+        .onChange(of: appModel.calibrationAdvanceRequests) {
+            calibration.acceptNow()
+            // The tick only routes while a capture is running, and locking the
+            // final arm has just ended one.
+            finishCalibrationIfDone()
+        }
+        .onChange(of: appModel.calibrationRedoRequests) {
+            calibration.redoCurrentArm()
+            // Dots are rebuilt rather than left: with no points captured there
+            // is no box to move them to, so they would sit at the corners of
+            // the reach that was just discarded.
+            buildReachPreview()
+            publishCalibrationState()
+        }
         .onChange(of: appModel.recenterRequests) { beginRecenter() }
         .onChange(of: appModel.recenterAcceptRequests) {
             calibration.acceptRecenter(head: handTracking.deviceTransform())
@@ -328,24 +341,38 @@ struct ImmersiveView: View {
             TargetEntity.updateConfirmCircle(circle, progress: calibration.dwellProgress)
         }
 
-        if calibration.phase == .finished, let profile = calibration.profile {
-            appModel.calibration = profile
-            appModel.useCalibration = true
-            // Sliders now show the patient's real numbers, so a later
-            // adjustment is a nudge rather than another capture.
-            appModel.seedManualFromCalibration()
-            // Kept as history: a workspace is far more informative compared
-            // against what it was than read on its own.
-            PatientStore.addCalibration(profile)
-            clearCalibrationScene()
-            configure()
-            if appModel.screen == .calibration { appModel.screen = .songSelection }
-        } else if calibration.phase == .capturing, !confirmRoot.children.isEmpty {
+        if calibration.phase == .capturing, !confirmRoot.children.isEmpty {
             // Circle belongs to the confirm step only; clear it when the next
             // arm starts its six directions.
             for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
         }
+        finishCalibrationIfDone()
 
+        publishCalibrationState()
+    }
+
+    /// Files a completed capture and leaves the calibration screen.
+    ///
+    /// Called from the tick *and* from the lock button, because the two reach
+    /// the finish from different places. The glance completes inside the tick,
+    /// so the tick sees it. The button completes in its own handler, and by the
+    /// next frame the phase is no longer one the tick routes on — which left
+    /// the last arm locking to nothing at all, the profile unsaved and the
+    /// screen stuck on a capture that was already over.
+    private func finishCalibrationIfDone() {
+        guard calibration.phase == .finished, let profile = calibration.profile else { return }
+
+        appModel.calibration = profile
+        appModel.useCalibration = true
+        // Sliders now show the patient's real numbers, so a later adjustment is
+        // a nudge rather than another capture.
+        appModel.seedManualFromCalibration()
+        // Kept as history: a workspace is far more informative compared against
+        // what it was than read on its own.
+        PatientStore.addCalibration(profile)
+        clearCalibrationScene()
+        configure()
+        if appModel.screen == .calibration { appModel.screen = .songSelection }
         publishCalibrationState()
     }
 

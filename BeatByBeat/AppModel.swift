@@ -309,6 +309,7 @@ class AppModel {
     private(set) var calibrationRequests = 0
     private(set) var calibrationCancelRequests = 0
     private(set) var calibrationAdvanceRequests = 0
+    private(set) var calibrationRedoRequests = 0
 
     func startCalibration() {
         screen = .calibration
@@ -362,6 +363,9 @@ class AppModel {
     /// Manual lock, for the therapist and for the Simulator where there may be
     /// no head pose to dwell with.
     func advanceCalibration() { calibrationAdvanceRequests += 1 }
+
+    /// Start the arm being measured over, keeping any already locked.
+    func redoCalibrationArm() { calibrationRedoRequests += 1 }
 
     func clearCalibration() {
         calibration = nil

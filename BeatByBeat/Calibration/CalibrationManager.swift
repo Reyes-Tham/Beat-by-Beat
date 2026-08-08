@@ -273,6 +273,22 @@ final class CalibrationManager {
         }
     }
 
+    /// Start the current arm's six directions over.
+    ///
+    /// Whole arm rather than the last direction. A reach that came out wrong
+    /// usually came out wrong because of how the patient was sitting or what
+    /// they understood the instruction to mean, and both of those make the
+    /// points either side of it suspect too.
+    ///
+    /// Arms already locked are left alone: they were confirmed, and throwing
+    /// away a good left arm because the right one went badly would mean
+    /// measuring it twice.
+    func redoCurrentArm() {
+        guard phase == .capturing || phase == .confirming else { return }
+        phase = .capturing
+        startArm()
+    }
+
     /// Manual accept, for the therapist and for the Simulator.
     func acceptNow() {
         switch phase {
