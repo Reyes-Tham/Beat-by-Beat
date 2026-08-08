@@ -23,6 +23,7 @@ struct ImmersiveView: View {
     /// Chart index the countdown was last published for, so it is republished
     /// when the next target changes and not on every frame.
     @State private var announcedNote = -1
+    @State private var discoRoot = Entity()
     @State private var spawnSound: AudioFileResource?
 
     var body: some View {
@@ -38,6 +39,18 @@ struct ImmersiveView: View {
             let field = TargetField(root: root)
             field.onScoreChange = { publishScore(field) }
             self.field = field
+
+            discoRoot.name = "Disco"
+            discoRoot.isEnabled = false
+            for index in 0..<4 {
+                let light = Entity()
+                var point = PointLightComponent(color: .white, intensity: 4000)
+                point.attenuationRadius = 6
+                light.components.set(point)
+                light.name = "Disco\(index)"
+                discoRoot.addChild(light)
+            }
+            content.add(discoRoot)
 
             confirmRoot.name = "CalibrationConfirm"
             previewRoot.name = "CalibrationPreview"
@@ -131,6 +144,8 @@ struct ImmersiveView: View {
                 appModel.isPlaying = false
             }
         }
+
+        updateDisco()
 
         // The fake palm has no update stream of its own — a target can spawn on
         // top of a stationary one, which would never produce a drag event.
@@ -297,6 +312,31 @@ struct ImmersiveView: View {
         appModel.calibrationSpan = calibration.currentBox?.size ?? .zero
     }
 
+    /// Coloured lights orbiting the play volume. Developer mode only.
+    private func updateDisco() {
+        guard appModel.developerMode else {
+            if discoRoot.isEnabled { discoRoot.isEnabled = false }
+            return
+        }
+        discoRoot.isEnabled = true
+
+        let volume = appModel.volume
+        let time = CACurrentMediaTime()
+        for (index, light) in discoRoot.children.enumerated() {
+            let phase = time * 1.4 + Double(index) * .pi / 2
+            light.position = volume.center + SIMD3<Float>(
+                Float(cos(phase)) * (volume.size.x * 0.9 + 0.5),
+                Float(sin(phase * 0.7)) * 0.4,
+                Float(sin(phase)) * 0.5
+            )
+            // Hue cycles per light, offset so they never agree.
+            let hue = (time * 0.25 + Double(index) * 0.25).truncatingRemainder(dividingBy: 1)
+            light.components[PointLightComponent.self]?.color = .init(
+                Color(hue: hue, saturation: 0.95, brightness: 1)
+            )
+        }
+    }
+
     /// Publishes when the next sphere will appear.
     ///
     /// The countdown spans from now to that spawn, so the bar fills exactly
@@ -338,13 +378,15 @@ struct ImmersiveView: View {
             let chart = beatMap.map {
                 Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand,
                             movements: appModel.enabledMovements,
-                            gripOrientations: appModel.enabledGripOrientations)
+                            gripOrientations: appModel.enabledGripOrientations,
+                            speedScale: appModel.developerMode ? appModel.developerSpeed : 1)
             } ?? Chart.generated(
                 bpm: song.bpm,
                 level: appModel.level,
                 hand: appModel.trainingHand,
                 movements: appModel.enabledMovements,
-                gripOrientations: appModel.enabledGripOrientations
+                gripOrientations: appModel.enabledGripOrientations,
+                speedScale: appModel.developerMode ? appModel.developerSpeed : 1
             )
             appModel.chartIsAuthored = beatMap != nil
             announcedNote = -1

@@ -129,7 +129,8 @@ extension Chart {
         level: ReachLevel,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
-        gripOrientations: Set<GripOrientation> = [.cup]
+        gripOrientations: Set<GripOrientation> = [.cup],
+        speedScale: Double = 1
     ) -> Chart {
         // Never empty: with nothing selected there would be no chart at all.
         let palette = movements.isEmpty ? [MovementType.reach]
@@ -138,8 +139,10 @@ extension Chart {
                                              : GripOrientation.allCases.filter(gripOrientations.contains)
         var gripIndex = 0
         let beats = beatMap.beats
-        let travelBeats = Int(level.travelBeats)
-        let spacing = Int(level.spacingBeats)
+        // Floors of 1 and 2: a chart with zero travel would spawn targets on
+        // top of their own beat, and zero spacing would never advance.
+        let travelBeats = max(1, Int(level.travelBeats / speedScale))
+        let spacing = max(2, Int(level.spacingBeats / speedScale))
 
         var notes: [ChartNote] = []
         // One cursor per arm, so each arm's successive targets relate to each
@@ -220,6 +223,7 @@ extension Chart {
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
         gripOrientations: Set<GripOrientation> = [.cup],
+        speedScale: Double = 1,
         seconds: TimeInterval = 120
     ) -> Chart {
         let beatDuration = 60.0 / bpm
@@ -230,7 +234,8 @@ extension Chart {
             beats: (0..<count).map { Double($0) * beatDuration }
         )
         return build(from: synthetic, level: level, hand: hand,
-                     movements: movements, gripOrientations: gripOrientations)
+                     movements: movements, gripOrientations: gripOrientations,
+                     speedScale: speedScale)
     }
 
     /// Random walk inside one arm's allowed box.

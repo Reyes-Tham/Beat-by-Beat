@@ -149,6 +149,17 @@ class AppModel {
         didSet { simulatedPalmUnit?.z = simulatedPalmDepth }
     }
 
+    /// Disco lights, a speed boost, and dancing cats.
+    ///
+    /// Off by default and persisted, so it survives a relaunch while never
+    /// being something a patient could stumble into.
+    var developerMode = UserDefaults.standard.bool(forKey: "developerMode") {
+        didSet { UserDefaults.standard.set(developerMode, forKey: "developerMode") }
+    }
+
+    /// How much faster developer mode runs a chart.
+    var developerSpeed: Double = 2.0
+
     /// Gates the simulator-only affordances, so the toggle can't be left on
     /// during a device demo.
     static let isSimulator: Bool = {

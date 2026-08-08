@@ -40,6 +40,23 @@ struct SettingsView: View {
 
                     Divider()
 
+                    section("Developer mode") {
+                        Toggle("Disco lights, double speed, dancing cats",
+                               isOn: $appModel.developerMode)
+                        Text("For showing the app off, not for a session. "
+                             + "Off by default and remembered between launches.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if appModel.developerMode {
+                            Text(String(format: "Charts run at %.0f× speed.",
+                                        appModel.developerSpeed))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider()
+
                     section("Debug") {
                         Toggle("Show volume outline", isOn: $appModel.showOutline)
                         Toggle("Show hand proxy", isOn: $appModel.showHandProxy)

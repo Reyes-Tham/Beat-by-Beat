@@ -14,6 +14,21 @@ struct ContentView: View {
     @State private var showSettings = false
 
     var body: some View {
+        HStack(spacing: 0) {
+            if appModel.developerMode { DancingCats() }
+
+            screen
+
+            if appModel.developerMode { DancingCats() }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(appModel)
+        }
+    }
+
+    @ViewBuilder
+    private var screen: some View {
         Group {
             switch appModel.screen {
             case .songSelection:
@@ -37,10 +52,6 @@ struct ContentView: View {
                 }
                 .frame(minWidth: 560, minHeight: 600)
             }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environment(appModel)
         }
     }
 }
