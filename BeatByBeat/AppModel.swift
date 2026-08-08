@@ -158,7 +158,11 @@ class AppModel {
     }
 
     /// How much faster developer mode runs a chart.
-    var developerSpeed: Double = 2.0
+    ///
+    /// Fast enough to be obviously a demo rather than a session: at six times
+    /// the travel and spacing floors take over, so targets arrive about as fast
+    /// as the chart can issue them.
+    var developerSpeed: Double = 6.0
 
     /// Gates the simulator-only affordances, so the toggle can't be left on
     /// during a device demo.

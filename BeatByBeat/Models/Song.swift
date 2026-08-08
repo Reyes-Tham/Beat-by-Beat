@@ -49,28 +49,28 @@ struct Song: Identifiable, Hashable {
             duration: 240
         ),
         Song(
+            id: "demo_song_3",
+            title: "Tung Tung Sahur",
+            movementFocus: "Brisk and even, steady alternating reaches",
+            bpm: 130.92,
+            audioResource: "demo_song_3",
+            beatMapResource: "demo_song_3_beats",
+            duration: 86
+        ),
+        Song(
+            id: "demo_song_4",
+            title: "Tralalero Tralala",
+            movementFocus: "Quick pulse, short bursts of movement",
+            bpm: 138.09,
+            audioResource: "demo_song_4",
+            beatMapResource: "demo_song_4_beats",
+            duration: 81
+        ),
+        Song(
             id: "steady_60",
             title: "Slow Steady",
             movementFocus: "Long single reaches, maximum rest",
             bpm: 60,
-            audioResource: nil,
-            beatMapResource: nil,
-            duration: nil
-        ),
-        Song(
-            id: "steady_90",
-            title: "Gentle Swing",
-            movementFocus: "Comfortable pace, even left/right",
-            bpm: 90,
-            audioResource: nil,
-            beatMapResource: nil,
-            duration: nil
-        ),
-        Song(
-            id: "steady_120",
-            title: "Walking Pace",
-            movementFocus: "Moderate tempo, wider reaches",
-            bpm: 120,
             audioResource: nil,
             beatMapResource: nil,
             duration: nil

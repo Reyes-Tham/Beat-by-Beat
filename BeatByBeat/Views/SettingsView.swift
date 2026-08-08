@@ -32,7 +32,7 @@ struct SettingsView: View {
                         Divider()
 
                         section("Developer mode") {
-                        Toggle("Disco lights, double speed, dancing cats",
+                        Toggle("Disco lights, 6× speed, dancing cats",
                                isOn: $appModel.developerMode)
                         Text("For showing the app off, not for a session. "
                              + "Off by default and remembered between launches.")
