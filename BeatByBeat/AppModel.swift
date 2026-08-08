@@ -147,13 +147,19 @@ class AppModel {
     var calibrationInstruction = ""
     var calibrationProgress = ""
     var calibrationAwaitingHand = false
+    /// 0...1 while the head is held toward the confirm circle.
+    var calibrationDwell: Float = 0
+    var calibrationCanConfirm = false
+    /// Reach captured so far for the current arm, in metres.
+    var calibrationSpan: SIMD3<Float> = .zero
     private(set) var calibrationRequests = 0
     private(set) var calibrationCancelRequests = 0
     private(set) var calibrationAdvanceRequests = 0
 
     func startCalibration() { calibrationRequests += 1 }
     func cancelCalibration() { calibrationCancelRequests += 1 }
-    /// "Far enough" — accepts wherever the hand got to for this step.
+    /// Manual lock, for the therapist and for the Simulator where there may be
+    /// no head pose to dwell with.
     func advanceCalibration() { calibrationAdvanceRequests += 1 }
 
     func clearCalibration() {

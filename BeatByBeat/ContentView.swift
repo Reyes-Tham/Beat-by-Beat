@@ -84,10 +84,11 @@ struct ContentView: View {
             Text("Calibrating — \(appModel.calibrationProgress)")
                 .font(.title3)
 
-            Text(appModel.calibrationStepName)
+            Text("\(appModel.calibrationStepName) arm")
                 .font(.headline)
 
-            Text(appModel.calibrationInstruction)
+            Text("Reach out as far as is comfortable — up, down, left, right "
+                 + "and forward. Take your time. Nothing to touch.")
                 .foregroundStyle(.secondary)
 
             if appModel.calibrationAwaitingHand {
@@ -95,12 +96,37 @@ struct ContentView: View {
                       systemImage: "hand.raised")
                     .font(.callout)
                     .foregroundStyle(.orange)
+            } else {
+                let span = appModel.calibrationSpan
+                Text(String(format: "Captured so far: %.0f × %.0f × %.0f cm",
+                            span.x * 100, span.y * 100, span.z * 100))
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
 
-            Text("Go only as far as is comfortable. Touching the sphere is not "
-                 + "required — press Far enough when you've stopped.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("When you're done, turn your head to the circle below and "
+                     + "hold it there for 3 seconds.")
+                    .font(.callout)
+
+                ProgressView(value: Double(appModel.calibrationDwell))
+                    .tint(.green)
+
+                if !appModel.calibrationCanConfirm {
+                    Text("Move your arm around a little more first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                // visionOS keeps eye gaze private, so this tracks head
+                // direction. Say so rather than implying eye tracking.
+                Text("Uses head direction — visionOS doesn't share eye gaze "
+                     + "with apps.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -178,10 +204,14 @@ struct ContentView: View {
     private var actionBar: some View {
         if appModel.isCalibrating {
             HStack(spacing: 12) {
-                Button("Far enough") { appModel.advanceCalibration() }
+                Button("Lock this arm") { appModel.advanceCalibration() }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!appModel.calibrationCanConfirm)
                 Button("Cancel") { appModel.cancelCalibration() }
                 Spacer()
+                Text("or hold your head on the circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         } else {
             HStack(spacing: 12) {

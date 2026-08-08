@@ -7,51 +7,21 @@ import Foundation
 import QuartzCore
 import simd
 
-/// Runs the reach capture: show a probe out past where the player can
-/// comfortably get, watch where their hand actually goes, repeat for each
-/// corner, then fit a box to the result.
+/// Captures the playable workspace by watching where the arm actually goes.
 ///
-/// The probe is deliberately out of reach. Nothing requires the player to
-/// touch it — the useful measurement is how far they *chose* to go, so a
-/// patient who gets a third of the way still produces good data. Contact just
-/// ends the step early.
+/// There is nothing to chase. An earlier version put probes at fixed corners
+/// and asked the patient to reach them, which measures the probe rather than
+/// the patient — someone who can't get to the upper corner produces a reading
+/// about that corner, not about their arm. Here the patient simply explores
+/// their own comfortable range and the box grows to fit.
+///
+/// Confirming is hands-free: hold your head toward the circle for three
+/// seconds. A button press is the wrong ask for someone whose affected hand is
+/// the thing being measured, and visionOS never exposes eye gaze to apps, so
+/// head direction is what "looking at it" has to mean.
 @MainActor
 @Observable
 final class CalibrationManager {
-
-    struct Step {
-        let name: String
-        let instruction: String
-        /// Where the probe sits, in unit-cube coordinates of the probe box.
-        let unit: SIMD3<Float>
-    }
-
-    /// Four corners plus one forward point. The corners fix width and height;
-    /// the span between them and the forward point fixes depth.
-    ///
-    /// The corners sit near the player (unit z 0.7) rather than at mid-depth.
-    /// With everything on one plane the fitted box's near face *was* that
-    /// plane, so depth came out as half its true size and kept bottoming out
-    /// against the minimum.
-    static let steps: [Step] = [
-        Step(name: "Upper left",
-             instruction: "Reach up and to your left, only as far as is comfortable.",
-             unit: [0.0, 1.0, 0.7]),
-        Step(name: "Upper right",
-             instruction: "Now up and to your right.",
-             unit: [1.0, 1.0, 0.7]),
-        Step(name: "Lower left",
-             instruction: "Down and to your left.",
-             unit: [0.0, 0.0, 0.7]),
-        Step(name: "Lower right",
-             instruction: "Down and to your right.",
-             unit: [1.0, 0.0, 0.7]),
-        // Unit z of 0 is the far face: minBound.z is the most negative, and
-        // -Z is away from the player.
-        Step(name: "Forward",
-             instruction: "Reach straight out in front of you.",
-             unit: [0.5, 0.5, 0.0]),
-    ]
 
     enum Phase: Equatable {
         case idle
@@ -59,77 +29,112 @@ final class CalibrationManager {
         case finished
     }
 
+    static let dwellDuration: TimeInterval = 3.0
+    /// How wide the confirm cone is, in degrees off head-forward.
+    static let dwellConeDegrees: Float = 12
+
     private(set) var phase: Phase = .idle
-    private(set) var stepIndex = 0
-    private(set) var reached: [SIMD3<Float>] = []
     private(set) var profile: CalibrationProfile?
-    /// True while the current step has never seen a tracked hand.
-    private(set) var awaitingHand = false
 
-    /// Box the probes are placed in — a generous expansion of wherever the
-    /// player was already working.
-    private(set) var probeBox: SpawnVolume = .fixed
-    private var hand: TrainingHand = .both
-    private var safetyScale: Float = 0.85
+    /// Arms still to capture, plus the one in progress.
+    private(set) var currentHand: TrainingHand = .right
+    private var remaining: [TrainingHand] = []
+    private var captured: [TrainingHand] = []
 
-    private var samples: [SIMD3<Float>] = []
+    /// 0...1 while the head is held toward the confirm circle.
+    private(set) var dwellProgress: Float = 0
+    private(set) var awaitingHand = true
+    /// Where the confirm circle sits, fixed once at the start of each arm.
+    private(set) var confirmCircle: SIMD3<Float>?
+
+    private var lower: SIMD3<Float>?
+    private var upper: SIMD3<Float>?
     private var trackingLost: [String] = []
-    private var lostThisStep = false
+    private var lostThisHand = false
     private var speeds: [Float] = []
     private var lastSample: (position: SIMD3<Float>, time: TimeInterval)?
+    private var safetyScale: Float = 0.85
+    private var sessionHand: TrainingHand = .both
 
-    var currentStep: Step? {
-        stepIndex < Self.steps.count ? Self.steps[stepIndex] : nil
+    /// Box captured so far for the current arm, or nil before the first
+    /// tracked sample. Drives the live preview.
+    var currentBox: SpawnVolume? {
+        guard let lower, let upper else { return nil }
+        return SpawnVolume(center: (lower + upper) / 2, size: upper - lower)
     }
 
-    var progress: String { "\(min(stepIndex + 1, Self.steps.count)) of \(Self.steps.count)" }
-
-    /// World position of the probe for the current step.
-    var probePosition: SIMD3<Float>? {
-        currentStep.map { probeBox.point(at: $0.unit) }
+    /// Reach captured so far for the current arm, in metres.
+    var currentSpan: SIMD3<Float> {
+        guard let lower, let upper else { return .zero }
+        return upper - lower
     }
+
+    /// Enough movement to be worth locking in. Stops a stray first sample
+    /// being confirmed as somebody's entire range.
+    var canConfirm: Bool {
+        let span = currentSpan
+        return max(span.x, max(span.y, span.z)) >= 0.12
+    }
+
+    var progress: String {
+        let total = captured.count + remaining.count + 1
+        return "arm \(captured.count + 1) of \(total)"
+    }
+
+    var handName: String { currentHand.displayName }
 
     // MARK: - Lifecycle
 
-    func begin(base: SpawnVolume, hand: TrainingHand, safetyScale: Float = 0.85) {
-        // Probes sit well outside the current working box so the player's own
-        // stopping point is the measurement, not the probe's position.
-        self.probeBox = SpawnVolume(
-            center: base.center,
-            size: [base.size.x * 1.6, base.size.y * 1.6, base.size.z * 1.5]
-        )
-        self.hand = hand
+    func begin(hand: TrainingHand, safetyScale: Float = 0.85) {
         self.safetyScale = safetyScale
-        phase = .capturing
-        stepIndex = 0
-        reached = []
+        self.sessionHand = hand
+        // Both means each arm gets its own pass; the boxes are unioned at the
+        // end, so an asymmetric patient produces an asymmetric workspace.
+        var order: [TrainingHand] = hand == .both ? [.left, .right] : [hand]
+        currentHand = order.removeFirst()
+        remaining = order
+        captured = []
         trackingLost = []
-        resetStep()
+        speeds = []
+        phase = .capturing
+        resetArm()
     }
 
     func cancel() {
         phase = .idle
-        samples = []
         lastSample = nil
+        confirmCircle = nil
     }
 
-    private func resetStep() {
-        samples = []
+    private func resetArm() {
+        lower = nil
+        upper = nil
         lastSample = nil
-        lostThisStep = false
+        lostThisHand = false
+        dwellProgress = 0
         awaitingHand = true
+        confirmCircle = nil
+    }
+
+    /// Pins the confirm circle. Placed once per arm so it stays put while the
+    /// patient reaches — a circle that follows the head could never be looked
+    /// *at*, and one sitting where they're already reaching would confirm by
+    /// accident.
+    func placeConfirmCircle(at position: SIMD3<Float>) {
+        guard phase == .capturing, confirmCircle == nil else { return }
+        confirmCircle = position
     }
 
     // MARK: - Capture
 
-    /// Feed every frame while capturing. `palm` is nil when the hand isn't
-    /// tracked, which is itself data — a limit the headset imposed rather than
-    /// one the player chose.
+    /// Feed every frame. `palm` is nil when the hand isn't tracked, which is
+    /// itself data — a limit the headset imposed rather than one the patient
+    /// chose.
     func record(palm: SIMD3<Float>?) {
         guard phase == .capturing else { return }
 
         guard let palm else {
-            if !samples.isEmpty { lostThisStep = true }
+            if lower != nil { lostThisHand = true }
             lastSample = nil
             return
         }
@@ -143,60 +148,71 @@ final class CalibrationManager {
             }
         }
         lastSample = (palm, now)
-        samples.append(palm)
+
+        lower = lower.map { simd_min($0, palm) } ?? palm
+        upper = upper.map { simd_max($0, palm) } ?? palm
     }
 
-    /// Ends the current step and moves on. Called on probe contact, or when
-    /// the player says they've gone far enough.
-    func advance() {
-        guard phase == .capturing, let step = currentStep else { return }
+    /// Advances or decays the confirm dwell.
+    func updateDwell(isLooking: Bool, deltaTime: TimeInterval) {
+        guard phase == .capturing else { return }
 
-        // Their closest approach to the probe is their best attempt at that
-        // corner. If the hand was never seen, fall back to the box centre so a
-        // failed step shrinks the envelope rather than corrupting it.
-        let probe = probeBox.point(at: step.unit)
-        let best = samples.min { distance($0, probe) < distance($1, probe) }
-            ?? probeBox.point(at: [0.5, 0.5, 0.5])
+        guard isLooking, canConfirm else {
+            // Decays rather than resetting, so a blink or a small head drift
+            // doesn't throw away two seconds of holding still.
+            dwellProgress = max(0, dwellProgress - Float(deltaTime / Self.dwellDuration) * 1.5)
+            return
+        }
 
-        reached.append(best)
-        if lostThisStep { trackingLost.append(step.name) }
+        dwellProgress = min(1, dwellProgress + Float(deltaTime / Self.dwellDuration))
+        if dwellProgress >= 1 { commitArm() }
+    }
 
-        stepIndex += 1
-        if stepIndex >= Self.steps.count {
+    /// Manual lock. Kept for the therapist and for the Simulator, where there
+    /// may be no head pose to dwell with.
+    func confirmNow() {
+        guard phase == .capturing, canConfirm else { return }
+        commitArm()
+    }
+
+    private func commitArm() {
+        guard let lower, let upper else { return }
+
+        armBoxes[currentHand] = (lower, upper)
+        if lostThisHand { trackingLost.append(currentHand.displayName) }
+        captured.append(currentHand)
+
+        if remaining.isEmpty {
             finish()
         } else {
-            resetStep()
+            currentHand = remaining.removeFirst()
+            resetArm()
         }
     }
 
-    /// True once the palm is inside the probe, so the caller can auto-advance.
-    func hasReachedProbe(palm: SIMD3<Float>, palmRadius: Float, probeRadius: Float) -> Bool {
-        guard let probe = probePosition else { return false }
-        return distance(palm, probe) <= palmRadius + probeRadius
-    }
+    private var armBoxes: [TrainingHand: (SIMD3<Float>, SIMD3<Float>)] = [:]
 
     private func finish() {
-        guard !reached.isEmpty else {
+        guard !armBoxes.isEmpty else {
             phase = .idle
             return
         }
 
-        var lower = reached[0]
-        var upper = reached[0]
-        for point in reached {
-            lower = simd_min(lower, point)
-            upper = simd_max(upper, point)
+        var lo = armBoxes.values.first!.0
+        var hi = armBoxes.values.first!.1
+        for (boxLow, boxHigh) in armBoxes.values {
+            lo = simd_min(lo, boxLow)
+            hi = simd_max(hi, boxHigh)
         }
 
         // A degenerate box would make every target unreachable, so hold a
-        // floor. Hitting this floor means the capture went wrong.
+        // floor. Hitting it means the capture went wrong.
         let minimum = SIMD3<Float>(0.24, 0.20, 0.14)
-        var size = upper - lower
-        let centre = (upper + lower) / 2
-        size = simd_max(size, minimum)
+        let centre = (hi + lo) / 2
+        let size = simd_max(hi - lo, minimum)
 
         profile = CalibrationProfile(
-            trainingHand: hand,
+            trainingHand: sessionHand,
             reachedCenter: centre,
             reachedSize: size,
             safetyScale: safetyScale,
@@ -205,6 +221,7 @@ final class CalibrationManager {
             createdAt: Date()
         )
         phase = .finished
+        confirmCircle = nil
     }
 
     /// 90th percentile rather than the maximum: a single tracking glitch can

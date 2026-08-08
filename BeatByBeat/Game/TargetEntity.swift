@@ -144,6 +144,44 @@ enum TargetEntity {
         shell.removeFromParent()
     }
 
+    /// Confirm circle for calibration: an outline that fills as the player
+    /// holds their head toward it. The fill is the only progress indicator
+    /// they can see without looking away from it.
+    static func makeConfirmCircle(radius: Float = 0.055) -> Entity {
+        let root = Entity()
+        root.name = "ConfirmCircle"
+
+        let backing = ModelEntity(
+            mesh: .generateCylinder(height: 0.004, radius: radius),
+            materials: [material(tint: .init(white: 0.9, alpha: 1), opacity: 0.22)]
+        )
+        // Cylinders stand along Y; lay it flat so the face points outward,
+        // then billboard the parent so it always faces the player.
+        backing.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+        backing.name = "Backing"
+        root.addChild(backing)
+
+        let fill = ModelEntity(
+            mesh: .generateCylinder(height: 0.006, radius: radius * 0.86),
+            materials: [material(tint: UIColor(red: 0.45, green: 0.95, blue: 0.6, alpha: 1),
+                                 opacity: 1.0)]
+        )
+        fill.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+        fill.name = "Fill"
+        fill.scale = [0.001, 1, 0.001]
+        root.addChild(fill)
+
+        root.components.set(BillboardComponent())
+        return root
+    }
+
+    /// Grows the fill to match dwell progress.
+    static func updateConfirmCircle(_ circle: Entity, progress: Float) {
+        guard let fill = circle.findEntity(named: "Fill") else { return }
+        let scale = max(0.001, progress)
+        fill.scale = [scale, 1, scale]
+    }
+
     nonisolated static let praiseSeconds: TimeInterval = 0.9
 
     /// Floating praise for a hit — rises out of the target and dissolves.

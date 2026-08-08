@@ -4,6 +4,7 @@
 //
 
 import ARKit
+import QuartzCore
 import RealityKit
 
 /// A forgiving stand-in for the hand: a sphere at the centre of the palm.
@@ -60,7 +61,19 @@ final class HandTrackingManager {
 
     private let session = ARKitSession()
     private let provider = HandTrackingProvider()
+    /// Head pose. visionOS never exposes eye gaze to apps, so head direction is
+    /// what "looking at something" has to mean.
+    private let worldTracking = WorldTrackingProvider()
     private var updateTask: Task<Void, Never>?
+
+    /// Current head transform, or nil if world tracking hasn't produced one.
+    func deviceTransform() -> simd_float4x4? {
+        guard worldTracking.state == .running,
+              let anchor = worldTracking.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()),
+              anchor.isTracked
+        else { return nil }
+        return anchor.originFromAnchorTransform
+    }
 
     func proxy(for hand: TrainingHand) -> HandProxy? {
         switch hand {
@@ -93,7 +106,11 @@ final class HandTrackingManager {
         }
 
         do {
-            try await session.run([provider])
+            // One session for both: hand anchors and head pose are needed
+            // together, and calibration confirms with a head-direction dwell.
+            var providers: [any DataProvider] = [provider]
+            if WorldTrackingProvider.isSupported { providers.append(worldTracking) }
+            try await session.run(providers)
         } catch {
             status = .failed("\(error)")
             print("[HandTracking] failed to run: \(error)")

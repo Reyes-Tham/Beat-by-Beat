@@ -3,6 +3,7 @@
 //  BeatByBeat
 //
 
+import QuartzCore
 import SwiftUI
 import RealityKit
 
@@ -15,10 +16,9 @@ struct ImmersiveView: View {
     @State private var calibration = CalibrationManager()
     @State private var field: TargetField?
     @State private var proxyMarkers: [TrainingHand: Entity] = [:]
-    @State private var probeRoot = Entity()
-
-    /// Probe is oversized: it's a place to aim at, not something to hit.
-    private let probeRadius: Float = 0.10
+    @State private var confirmRoot = Entity()
+    @State private var previewRoot = Entity()
+    @State private var lastCalibrationTick: TimeInterval = 0
 
     var body: some View {
         RealityView { content in
@@ -34,8 +34,10 @@ struct ImmersiveView: View {
             field.onScoreChange = { publishScore(field) }
             self.field = field
 
-            probeRoot.name = "CalibrationProbe"
-            content.add(probeRoot)
+            confirmRoot.name = "CalibrationConfirm"
+            previewRoot.name = "CalibrationPreview"
+            content.add(confirmRoot)
+            content.add(previewRoot)
 
             configure(field)
 
@@ -65,7 +67,7 @@ struct ImmersiveView: View {
         .onChange(of: appModel.isPlaying) { startOrStop() }
         .onChange(of: appModel.calibrationRequests) { beginCalibration() }
         .onChange(of: appModel.calibrationCancelRequests) { cancelCalibration() }
-        .onChange(of: appModel.calibrationAdvanceRequests) { acceptCalibrationStep() }
+        .onChange(of: appModel.calibrationAdvanceRequests) { calibration.confirmNow() }
         .onChange(of: appModel.useCalibration) { configure() }
         .onChange(of: appModel.simulateHandWithMouse) {
             appModel.simulatedPalmUnit = nil
@@ -129,84 +131,120 @@ struct ImmersiveView: View {
         appModel.isPlaying = false
         field.clearTargets()
         field.outlineIsVisible = false
-        // Probes are placed relative to whatever box is in use, so the sliders
-        // give the capture a sane starting scale.
-        calibration.begin(base: appModel.volume, hand: appModel.trainingHand)
+        calibration.begin(hand: appModel.trainingHand)
+        lastCalibrationTick = CACurrentMediaTime()
+        buildReachPreview()
         publishCalibrationState()
-        showProbe()
     }
 
     private func cancelCalibration() {
         calibration.cancel()
-        clearProbe()
+        clearCalibrationScene()
         publishCalibrationState()
         configure()
     }
 
     private func tickCalibration() {
-        // The training hand is the one being measured. With Both, whichever is
-        // visible drives it.
-        let palm = handTracking.proxy(for: appModel.trainingHand)?.position
+        let now = CACurrentMediaTime()
+        let dt = min(0.1, now - lastCalibrationTick)
+        lastCalibrationTick = now
+
+        let head = handTracking.deviceTransform()
+
+        // Circle is pinned once per arm, low and central, so a downward glance
+        // confirms and a forward reach doesn't.
+        if calibration.confirmCircle == nil, let head {
+            let position = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
+            var forward = -SIMD3<Float>(head.columns.2.x, head.columns.2.y, head.columns.2.z)
+            forward.y = 0
+            forward = length(forward) < 1e-4 ? [0, 0, -1] : normalize(forward)
+            calibration.placeConfirmCircle(at: position + forward * 0.45 + [0, -0.40, 0])
+            showConfirmCircle()
+        }
+
+        let palm = handTracking.proxy(for: calibration.currentHand)?.position
             ?? (appModel.simulateHandWithMouse
-                ? appModel.simulatedPalmUnit.map { calibration.probeBox.point(at: $0) }
+                ? appModel.simulatedPalmUnit.map { appModel.manualVolume.point(at: $0) }
                 : nil)
 
         calibration.record(palm: palm)
+        calibration.updateDwell(isLooking: isLookingAtConfirmCircle(head: head), deltaTime: dt)
+
         updateProxyMarkers()
-
-        // Contact ends a step early, but nothing depends on it — the useful
-        // measurement is where the hand stopped, not whether it arrived.
-        if let palm,
-           calibration.hasReachedProbe(
-                palm: palm,
-                palmRadius: activePalmRadius,
-                probeRadius: probeRadius
-           ) {
-            acceptCalibrationStep()
-            return
+        updateReachPreview()
+        if let circle = confirmRoot.children.first {
+            TargetEntity.updateConfirmCircle(circle, progress: calibration.dwellProgress)
         }
-
-        publishCalibrationState()
-    }
-
-    private func acceptCalibrationStep() {
-        calibration.advance()
-        publishCalibrationState()
 
         if calibration.phase == .finished, let profile = calibration.profile {
             appModel.calibration = profile
             appModel.useCalibration = true
-            clearProbe()
+            clearCalibrationScene()
             configure()
-        } else {
-            showProbe()
+        } else if calibration.confirmCircle == nil || confirmRoot.children.isEmpty {
+            showConfirmCircle()
+        }
+
+        publishCalibrationState()
+    }
+
+    /// Head direction, not eye gaze — visionOS keeps gaze private, so this is
+    /// what "looking at" can mean. For a target in front of the player the two
+    /// amount to the same movement.
+    private func isLookingAtConfirmCircle(head: simd_float4x4?) -> Bool {
+        guard let head, let circle = calibration.confirmCircle else { return false }
+        let position = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
+        let forward = -SIMD3<Float>(head.columns.2.x, head.columns.2.y, head.columns.2.z)
+        let toCircle = circle - position
+        guard length(toCircle) > 1e-4 else { return false }
+        let cosAngle = dot(normalize(forward), normalize(toCircle))
+        let limit = cos(CalibrationManager.dwellConeDegrees * .pi / 180)
+        return cosAngle >= limit
+    }
+
+    private func showConfirmCircle() {
+        guard let position = calibration.confirmCircle else { return }
+        for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
+        let circle = TargetEntity.makeConfirmCircle()
+        circle.position = position
+        confirmRoot.addChild(circle)
+    }
+
+    /// Eight dots showing the box captured so far, so the patient and the
+    /// therapist can both see the range growing as they move.
+    private func buildReachPreview() {
+        for child in previewRoot.children.reversed() { TargetEntity.destroy(child) }
+        for _ in 0..<8 {
+            let dot = TargetEntity.makeDebugDot(radius: 0.016)
+            dot.isEnabled = false
+            previewRoot.addChild(dot)
         }
     }
 
-    private func showProbe() {
-        clearProbe()
-        guard let position = calibration.probePosition else { return }
-        let probe = TargetEntity.make(
-            hand: appModel.trainingHand,
-            radius: probeRadius
-        )
-        probe.position = position
-        probeRoot.addChild(probe)
-        TargetEntity.playSpawnAnimation(on: probe)
+    private func updateReachPreview() {
+        guard let box = calibration.currentBox else { return }
+        // Dots are moved rather than rebuilt: this runs every frame.
+        for (index, corner) in box.corners.enumerated() where index < previewRoot.children.count {
+            let dot = previewRoot.children[index]
+            dot.isEnabled = true
+            dot.position = corner
+        }
     }
 
-    private func clearProbe() {
-        for child in probeRoot.children.reversed() {
-            TargetEntity.destroy(child)
-        }
+    private func clearCalibrationScene() {
+        for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
+        for child in previewRoot.children.reversed() { TargetEntity.destroy(child) }
     }
 
     private func publishCalibrationState() {
         appModel.isCalibrating = calibration.phase == .capturing
-        appModel.calibrationStepName = calibration.currentStep?.name ?? ""
-        appModel.calibrationInstruction = calibration.currentStep?.instruction ?? ""
+        appModel.calibrationStepName = calibration.handName
         appModel.calibrationProgress = calibration.progress
         appModel.calibrationAwaitingHand = calibration.awaitingHand
+        appModel.calibrationDwell = calibration.dwellProgress
+        appModel.calibrationCanConfirm = calibration.canConfirm
+        let span = calibration.currentSpan
+        appModel.calibrationSpan = span
     }
 
     // MARK: - Transport
@@ -279,9 +317,9 @@ struct ImmersiveView: View {
     /// Palms currently driving the game — real ones, or the mouse stand-in.
     private var activePalms: [(hand: TrainingHand, proxy: HandProxy)] {
         if appModel.simulateHandWithMouse, let unit = appModel.simulatedPalmUnit {
-            // During a capture the pad spans the probe box, which is larger
-            // than the gameplay volume — otherwise the corners are unreachable.
-            let box = calibration.phase == .capturing ? calibration.probeBox : appModel.volume
+            // During a capture the pad spans the manual box, which is the
+            // widest reference available before a profile exists.
+            let box = calibration.phase == .capturing ? appModel.manualVolume : appModel.volume
             let proxy = HandProxy(
                 position: box.point(at: unit),
                 radius: HandProxy.simulatedRadius,
