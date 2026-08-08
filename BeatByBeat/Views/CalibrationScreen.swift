@@ -12,6 +12,7 @@ import SwiftUI
 struct CalibrationScreen: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +23,13 @@ struct CalibrationScreen: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
                 Spacer()
+                // Settings stay reachable even though calibration gates play,
+                // so the manual workspace and debug aids are never locked away.
+                Button { showSettings = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.title2)
+                }
+                .buttonStyle(.borderless)
             }
             .padding(.horizontal, 36)
             .padding(.top, 26)
@@ -56,7 +64,9 @@ struct CalibrationScreen: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!appModel.calibrationIsConfirming && !appModel.calibrationCanConfirm)
 
-                Button("Cancel") { appModel.cancelCalibration() }
+                Button(appModel.calibration == nil ? "Skip for now" : "Cancel") {
+                    appModel.cancelCalibration()
+                }
                 Spacer()
                 Text(appModel.calibrationIsConfirming
                      ? "or glance at the circle"
@@ -68,6 +78,10 @@ struct CalibrationScreen: View {
             .padding(.vertical, 18)
         }
         .frame(width: 560)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environment(appModel)
+        }
         .task {
             // Calibration needs the space open; opening it here means the
             // patient never has to know that.

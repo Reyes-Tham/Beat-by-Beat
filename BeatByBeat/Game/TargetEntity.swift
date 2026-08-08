@@ -16,6 +16,8 @@ struct PourComponent: Component {
 
 struct TargetComponent: Component {
     var movement: MovementType = .reach
+    /// Set only on grip targets: how the hand has to be turned.
+    var gripOrientation: GripOrientation?
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
@@ -37,7 +39,8 @@ enum TargetEntity {
         hand: TrainingHand,
         radius: Float = defaultRadius,
         noteIndex: Int = -1,
-        movement: MovementType = .reach
+        movement: MovementType = .reach,
+        gripOrientation: GripOrientation? = nil
     ) -> Entity {
         if movement == .pour {
             return makePourTube(hand: hand, radius: radius, noteIndex: noteIndex)
@@ -76,13 +79,14 @@ enum TargetEntity {
             ring.name = "GripRing"
             root.addChild(ring)
 
-            if let icon = makeGripIcon(radius: radius) {
+            if let icon = makeGripIcon(radius: radius, orientation: gripOrientation) {
                 root.addChild(icon)
             }
         }
 
         root.components.set(TargetComponent(
             movement: movement,
+            gripOrientation: gripOrientation,
             hand: hand,
             radius: radius,
             noteIndex: noteIndex
@@ -157,7 +161,7 @@ enum TargetEntity {
     /// Uses a bundled `grip_icon` image when one is present and falls back to a
     /// drawn glyph otherwise — drop a PNG in Resources to replace the artwork
     /// without touching this code.
-    static func makeGripIcon(radius: Float) -> Entity? {
+    static func makeGripIcon(radius: Float, orientation: GripOrientation? = nil) -> Entity? {
         guard let texture = gripTexture else { return nil }
 
         var material = UnlitMaterial()
@@ -167,6 +171,11 @@ enum TargetEntity {
 
         let size = radius * 1.5
         let plane = ModelEntity(mesh: .generatePlane(width: size, height: size), materials: [material])
+        // Turned to show which way the hand has to be, so the orientation is
+        // readable on approach rather than discovered by failing to score.
+        if let orientation {
+            plane.orientation = simd_quatf(angle: orientation.iconRotation, axis: [0, 0, 1])
+        }
         let root = Entity()
         root.name = "GripIcon"
         root.position = [0, radius * 1.85, 0]

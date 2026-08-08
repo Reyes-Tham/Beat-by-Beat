@@ -132,10 +132,12 @@ final class TargetField {
         noteIndex: Int = -1,
         beatTime: TimeInterval? = nil,
         travelTime: TimeInterval = 1,
-        movement: MovementType = .reach
+        movement: MovementType = .reach,
+        gripOrientation: GripOrientation? = nil
     ) -> Entity {
         let target = TargetEntity.make(
-            hand: hand, radius: radius, noteIndex: noteIndex, movement: movement
+            hand: hand, radius: radius, noteIndex: noteIndex,
+            movement: movement, gripOrientation: gripOrientation
         )
         target.position = position
         target.components[TargetComponent.self]?.beatTime = beatTime
@@ -199,7 +201,8 @@ final class TargetField {
             noteIndex: index,
             beatTime: note.time,
             travelTime: note.travel,
-            movement: note.movement
+            movement: note.movement,
+            gripOrientation: note.gripOrientation
         )
     }
 
@@ -257,7 +260,13 @@ final class TargetField {
                 // hand has to close on it, which is the whole movement.
                 let inHand = distance(palm.proxy.gripPosition, target.position)
                     <= palm.proxy.radius + component.radius
-                if inHand, palm.proxy.isGripping {
+                // Orientation too, when the note asks for one: taking a cup and
+                // taking a door knob are different tasks even though the arm
+                // travels the same distance.
+                let turned = component.gripOrientation.map {
+                    $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
+                } ?? true
+                if inHand, palm.proxy.isGripping, turned {
                     retire(target, component: component, songTime: songTime)
                 }
 

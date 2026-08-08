@@ -322,6 +322,51 @@ struct SongSelectionView: View {
                 .buttonStyle(.plain)
                 .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
                 .hoverEffect()
+
+                // Nested under Grip, because an orientation with grip switched
+                // off would be a setting that does nothing.
+                if movement == .grip, isOn {
+                    gripOrientations
+                        .padding(.leading, 22)
+                }
+            }
+        }
+    }
+
+    /// Which hand orientations grip notes may ask for.
+    private var gripOrientations: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Hand orientation")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(GripOrientation.allCases) { orientation in
+                let isOn = appModel.enabledGripOrientations.contains(orientation)
+                Button {
+                    if isOn {
+                        appModel.enabledGripOrientations.remove(orientation)
+                    } else {
+                        appModel.enabledGripOrientations.insert(orientation)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(orientation.displayName)
+                                .font(.callout)
+                            Text(orientation.detail)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                }
+                .buttonStyle(.plain)
+                .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary.opacity(0.5)))
+                .hoverEffect()
             }
         }
     }

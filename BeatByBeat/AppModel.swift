@@ -27,12 +27,19 @@ class AppModel {
 
     /// Which screen the window is showing.
     enum Screen { case songSelection, calibration, countdown, game, results }
-    var screen: Screen = .songSelection
+    /// Launches into calibration. Reach varies between sessions, so a profile
+    /// from yesterday is a starting point rather than a measurement of today —
+    /// and a stale envelope silently places every target in the wrong place.
+    var screen: Screen = .calibration
 
     /// Movements this session trains. Never empty — with nothing ticked there
     /// would be no chart at all.
     var enabledMovements: Set<MovementType> = [.reach] {
         didSet { if enabledMovements.isEmpty { enabledMovements = [.reach] } }
+    }
+    /// Hand orientations grip notes may ask for. Never empty while grip is on.
+    var enabledGripOrientations: Set<GripOrientation> = [.knob] {
+        didSet { if enabledGripOrientations.isEmpty { enabledGripOrientations = [.knob] } }
     }
     /// The run just finished, shown on the results screen.
     var lastRun: SessionScore?

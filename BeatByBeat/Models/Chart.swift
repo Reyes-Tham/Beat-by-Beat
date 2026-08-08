@@ -55,9 +55,11 @@ struct ChartNote: Codable, Equatable {
     var unit: SIMD3<Float>
     /// What the player has to do when they get there.
     var movement: MovementType = .reach
+    /// How the hand must be turned. Grip notes only.
+    var gripOrientation: GripOrientation?
 
     private enum CodingKeys: String, CodingKey {
-        case time, travel, hand, x, y, z, movement
+        case time, travel, hand, x, y, z, movement, gripOrientation
     }
 
     init(
@@ -65,13 +67,15 @@ struct ChartNote: Codable, Equatable {
         travel: TimeInterval,
         hand: TrainingHand,
         unit: SIMD3<Float>,
-        movement: MovementType = .reach
+        movement: MovementType = .reach,
+        gripOrientation: GripOrientation? = nil
     ) {
         self.time = time
         self.travel = travel
         self.hand = hand
         self.unit = unit
         self.movement = movement
+        self.gripOrientation = gripOrientation
     }
 
     // SIMD3 isn't usefully Codable, so x/y/z go over the wire separately.
@@ -86,6 +90,9 @@ struct ChartNote: Codable, Equatable {
             try container.decode(Float.self, forKey: .z)
         )
         movement = try container.decodeIfPresent(MovementType.self, forKey: .movement) ?? .reach
+        gripOrientation = try container.decodeIfPresent(
+            GripOrientation.self, forKey: .gripOrientation
+        )
     }
 
     func encode(to encoder: Encoder) throws {
@@ -97,6 +104,7 @@ struct ChartNote: Codable, Equatable {
         try container.encode(unit.y, forKey: .y)
         try container.encode(unit.z, forKey: .z)
         try container.encode(movement, forKey: .movement)
+        try container.encodeIfPresent(gripOrientation, forKey: .gripOrientation)
     }
 }
 
@@ -120,11 +128,15 @@ extension Chart {
         from beatMap: BeatMap,
         level: ReachLevel,
         hand: TrainingHand,
-        movements: Set<MovementType> = [.reach]
+        movements: Set<MovementType> = [.reach],
+        gripOrientations: Set<GripOrientation> = [.knob]
     ) -> Chart {
         // Never empty: with nothing selected there would be no chart at all.
         let palette = movements.isEmpty ? [MovementType.reach]
                                         : MovementType.allCases.filter(movements.contains)
+        let grips = gripOrientations.isEmpty ? [GripOrientation.knob]
+                                             : GripOrientation.allCases.filter(gripOrientations.contains)
+        var gripIndex = 0
         let beats = beatMap.beats
         let travelBeats = Int(level.travelBeats)
         let spacing = Int(level.spacingBeats)
@@ -152,6 +164,13 @@ extension Chart {
             // Cycled rather than random so every selected movement gets an
             // even share and none can go missing from a short run.
             let movement = palette[placed % palette.count]
+            // Cycled independently of the movement palette, so each selected
+            // orientation still comes round evenly when grips are sparse.
+            var orientation: GripOrientation?
+            if movement == .grip {
+                orientation = grips[gripIndex % grips.count]
+                gripIndex += 1
+            }
             notes.append(ChartNote(
                 time: beats[index],
                 // Travel spans real beats, so it tracks any tempo drift in the
@@ -159,7 +178,8 @@ extension Chart {
                 travel: (beats[index] - beats[index - travelBeats]) * movement.travelMultiplier,
                 hand: noteHand,
                 unit: position,
-                movement: movement
+                movement: movement,
+                gripOrientation: orientation
             ))
             index += spacing
             placed += 1
@@ -199,6 +219,7 @@ extension Chart {
         level: ReachLevel,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
+        gripOrientations: Set<GripOrientation> = [.knob],
         seconds: TimeInterval = 120
     ) -> Chart {
         let beatDuration = 60.0 / bpm
@@ -208,7 +229,8 @@ extension Chart {
             bpm: bpm,
             beats: (0..<count).map { Double($0) * beatDuration }
         )
-        return build(from: synthetic, level: level, hand: hand, movements: movements)
+        return build(from: synthetic, level: level, hand: hand,
+                     movements: movements, gripOrientations: gripOrientations)
     }
 
     /// Random walk inside one arm's allowed box.

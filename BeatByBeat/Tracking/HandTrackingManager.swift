@@ -49,6 +49,8 @@ struct HandProxy {
     var updatedAt: TimeInterval
     /// How closed the hand is, 0 open … 1 shut.
     var gripClosure: Float = 0
+    /// Direction the palm faces, in world space. Zero when unknown.
+    var palmNormal: SIMD3<Float> = .zero
 
     var isGripping: Bool { gripClosure >= 1 }
 }
@@ -177,7 +179,8 @@ final class HandTrackingManager {
             position: wristPosition,
             gripPosition: graspPoint(of: skeleton, anchor: anchor) ?? wristPosition,
             updatedAt: anchor.timestamp,
-            gripClosure: closure(of: skeleton)
+            gripClosure: closure(of: skeleton),
+            palmNormal: palmNormal(of: skeleton, anchor: anchor) ?? .zero
         )
     }
 
@@ -195,6 +198,33 @@ final class HandTrackingManager {
             return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
         }
         return (world(thumb) + world(index)) / 2
+    }
+
+    /// Which way the palm faces, from the plane through the wrist and the
+    /// index and little knuckles.
+    ///
+    /// The cross product's sign follows the hand's chirality, so the left hand
+    /// is flipped — otherwise every orientation would read inverted on one
+    /// side and grips would only ever register with one hand.
+    private static func palmNormal(
+        of skeleton: HandSkeleton,
+        anchor: HandAnchor
+    ) -> SIMD3<Float>? {
+        let wrist = skeleton.joint(.wrist)
+        let index = skeleton.joint(.indexFingerKnuckle)
+        let little = skeleton.joint(.littleFingerKnuckle)
+        guard wrist.isTracked, index.isTracked, little.isTracked else { return nil }
+
+        func world(_ joint: HandSkeleton.Joint) -> SIMD3<Float> {
+            let m = anchor.originFromAnchorTransform * joint.anchorFromJointTransform
+            return SIMD3(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+        }
+
+        let origin = world(wrist)
+        let normal = cross(world(index) - origin, world(little) - origin)
+        guard length(normal) > 1e-5 else { return nil }
+        let sign: Float = anchor.chirality == .left ? -1 : 1
+        return normalize(normal) * sign
     }
 
     /// Thumb tip to index tip, mapped to 0…1. Nil-safe: an untracked fingertip

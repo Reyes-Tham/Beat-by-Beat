@@ -296,12 +296,14 @@ struct ImmersiveView: View {
             let beatMap = song.beatMapResource.flatMap { BeatMap.load(resource: $0) }
             let chart = beatMap.map {
                 Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand,
-                            movements: appModel.enabledMovements)
+                            movements: appModel.enabledMovements,
+                            gripOrientations: appModel.enabledGripOrientations)
             } ?? Chart.generated(
                 bpm: song.bpm,
                 level: appModel.level,
                 hand: appModel.trainingHand,
-                movements: appModel.enabledMovements
+                movements: appModel.enabledMovements,
+                gripOrientations: appModel.enabledGripOrientations
             )
             appModel.chartIsAuthored = beatMap != nil
             appModel.noteCount = chart.notes.count
