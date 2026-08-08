@@ -108,6 +108,18 @@ class AppModel {
     var chartIsAuthored = false
     var noteCount = 0
 
+    // MARK: - Metronome
+    //
+    // Beat *events*, not a per-frame phase: publishing progress every frame
+    // would re-render the panel at 90Hz to move a bar.
+
+    /// Index of the beat currently sounding.
+    var currentBeat = 0
+    /// How long this beat lasts. Taken from the song's real grid where there is
+    /// one, so it follows the recording rather than a nominal tempo.
+    var beatDuration: TimeInterval = 0.5
+    var beatsPerBar = 4
+
     // MARK: - Spawn tuning
     //
     // Temporary: these knobs exist so we can find sane fixed numbers on device.

@@ -96,7 +96,7 @@ struct SongSelectionView: View {
             }
             .padding(.vertical, 18)
         }
-        .frame(width: 860)
+        .frame(minWidth: 860, minHeight: 620)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }

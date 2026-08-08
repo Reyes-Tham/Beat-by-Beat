@@ -44,6 +44,13 @@ struct GameView: View {
                     .foregroundStyle(.secondary)
             }
 
+            MetronomeBar(
+                beat: appModel.currentBeat,
+                beatDuration: appModel.beatDuration,
+                beatsPerBar: appModel.beatsPerBar,
+                isRunning: appModel.isPlaying
+            )
+
             if !trackingIsHealthy {
                 Label(trackingLabel, systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -55,7 +62,7 @@ struct GameView: View {
             }
         }
         .padding(28)
-        .frame(width: 380)
+        .frame(minWidth: 380, minHeight: 340)
     }
 
     private var trackingIsHealthy: Bool {

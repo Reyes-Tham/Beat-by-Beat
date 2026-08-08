@@ -24,7 +24,7 @@ struct ContentView: View {
                 CountdownView(songTitle: appModel.selectedSong.title) {
                     appModel.countdownFinished()
                 }
-                .frame(width: 520, height: 520)
+                .frame(minWidth: 460, minHeight: 460)
             case .game:
                 GameView(showSettings: $showSettings)
             case .results:
@@ -35,7 +35,7 @@ struct ContentView: View {
                 )) {
                     appModel.backToSongs()
                 }
-                .frame(width: 620, height: 660)
+                .frame(minWidth: 560, minHeight: 600)
             }
         }
         .sheet(isPresented: $showSettings) {

@@ -22,8 +22,9 @@ struct BeatByBeatApp: App {
                     .environment(appModel)
             }
         }
-        // Song selection and the game panel are very different widths, so the
-        // window follows its content rather than being pinned to one size.
+        // Song selection and the game panel are very different sizes, so the
+        // window follows its content. Each screen carries its own minimum, so
+        // "follows content" can't collapse one to nothing.
         .defaultSize(width: 880, height: 900)
         .windowResizability(.contentSize)
 

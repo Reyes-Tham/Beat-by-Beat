@@ -20,6 +20,10 @@ struct ImmersiveView: View {
     @State private var previewRoot = Entity()
     @State private var lastCalibrationTick: TimeInterval = 0
     @State private var hitSound: AudioFileResource?
+    /// The song's beat grid, kept for the metronome. Advancing a cursor beats
+    /// searching it every frame, and song time only ever moves forward.
+    @State private var beatTimes: [TimeInterval] = []
+    @State private var beatCursor = 0
     @State private var spawnSound: AudioFileResource?
 
     var body: some View {
@@ -116,6 +120,7 @@ struct ImmersiveView: View {
             let songTime = conductor.songTime
             appModel.songTime = songTime
             conductor.updateFade(songTime: songTime)
+            updateMetronome(songTime: songTime)
 
             for due in scheduler.due(at: songTime) {
                 field.spawn(note: due.note, index: due.index)
@@ -293,6 +298,35 @@ struct ImmersiveView: View {
         appModel.calibrationSpan = calibration.currentBox?.size ?? .zero
     }
 
+    /// Publishes which beat the song is on, and how long it lasts.
+    ///
+    /// Uses the song's own beat timestamps when it has them, so the metronome
+    /// tracks the recording rather than drifting against it on a nominal BPM.
+    private func updateMetronome(songTime: TimeInterval) {
+        guard !beatTimes.isEmpty else {
+            // No grid: fall back to a constant tempo.
+            let duration = 60.0 / max(appModel.bpm, 1)
+            let index = max(0, Int(songTime / duration))
+            if index != appModel.currentBeat {
+                appModel.currentBeat = index
+                appModel.beatDuration = duration
+            }
+            return
+        }
+
+        while beatCursor + 1 < beatTimes.count, beatTimes[beatCursor + 1] <= songTime {
+            beatCursor += 1
+        }
+        guard beatCursor != appModel.currentBeat else { return }
+
+        let start = beatTimes[beatCursor]
+        let next = beatCursor + 1 < beatTimes.count
+            ? beatTimes[beatCursor + 1]
+            : start + appModel.beatDuration
+        appModel.currentBeat = beatCursor
+        appModel.beatDuration = max(0.05, next - start)
+    }
+
     // MARK: - Transport
 
     private func startOrStop() {
@@ -313,6 +347,10 @@ struct ImmersiveView: View {
                 gripOrientations: appModel.enabledGripOrientations
             )
             appModel.chartIsAuthored = beatMap != nil
+            beatTimes = beatMap?.beats ?? []
+            beatCursor = 0
+            appModel.currentBeat = 0
+            appModel.beatDuration = 60.0 / max(song.bpm, 1)
             appModel.noteCount = chart.notes.count
             appModel.bpm = chart.bpm
             conductor.bpm = chart.bpm
