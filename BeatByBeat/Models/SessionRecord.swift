@@ -157,24 +157,48 @@ struct SessionRecord: Codable, Identifiable {
     /// scattered dots of identical colour.
     static let heatmapResolution = 5
 
-    /// Attempts and successes per cell.
+    /// Which way the workspace is being looked at.
+    enum HeatPlane {
+        /// Facing the patient: across is their left to right, up is height.
+        case frontal
+        /// Looking down on them: across is their left to right, up the page is
+        /// away from the body.
+        case transverse
+    }
+
+    /// Attempts and successes per cell of one flattened view.
     ///
-    /// Both, not just successes: colouring by hit count alone made every cell
-    /// identical when nothing repeated, whereas success *rate* shows the thing
-    /// worth seeing — which part of the workspace they struggled in.
-    var heatmap: [SIMD3<Int>: HeatCell] {
-        var cells: [SIMD3<Int>: HeatCell] = [:]
+    /// Flattened rather than kept as a volume. A volume can only be drawn from
+    /// some angle, and in a stereo window that angle moves with the viewer's
+    /// head, so no cell holds a fixed place on the page and depth can only be
+    /// shown by hiding the cells behind. Two flat views carry all three axes
+    /// between them and every cell stays where it was put.
+    ///
+    /// Attempts and successes both, not just successes: colouring by hit count
+    /// alone made every cell identical when nothing repeated, whereas success
+    /// *rate* shows the thing worth seeing — where they struggled.
+    func heatmap(_ plane: HeatPlane) -> [SIMD2<Int>: HeatCell] {
+        var cells: [SIMD2<Int>: HeatCell] = [:]
         let n = Self.heatmapResolution
+
+        func bucket(_ value: Float) -> Int {
+            min(n - 1, max(0, Int(value * Float(n))))
+        }
+
         for outcome in outcomes {
-            let cell = SIMD3<Int>(
-                min(n - 1, max(0, Int(outcome.unit.x * Float(n)))),
-                min(n - 1, max(0, Int(outcome.unit.y * Float(n)))),
-                min(n - 1, max(0, Int(outcome.unit.z * Float(n))))
-            )
-            var entry = cells[cell] ?? HeatCell(attempts: 0, successes: 0)
+            // Row 0 is the top of the page: highest for the frontal view,
+            // furthest from the body for the view from above. Unit z of 0 is
+            // the far side, so it needs no flipping and unit y does.
+            let column = bucket(outcome.unit.x)
+            let row = switch plane {
+            case .frontal: n - 1 - bucket(outcome.unit.y)
+            case .transverse: bucket(outcome.unit.z)
+            }
+
+            var entry = cells[SIMD2(column, row)] ?? HeatCell(attempts: 0, successes: 0)
             entry.attempts += 1
             if outcome.reached { entry.successes += 1 }
-            cells[cell] = entry
+            cells[SIMD2(column, row)] = entry
         }
         return cells
     }
