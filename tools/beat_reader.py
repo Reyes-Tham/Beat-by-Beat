@@ -3,9 +3,13 @@
 Emits actual beat timestamps, so a chart never drifts against the audio no
 matter how imprecise the tempo estimate is.
 """
-import wave, array, math, json
+import wave, array, math, json, sys
 
-w = wave.open("analysis.wav","rb"); sr,n = w.getframerate(), w.getnframes()
+WAV = sys.argv[1] if len(sys.argv) > 1 else "analysis.wav"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "demo_song_beats.json"
+SONG_ID = OUT.rsplit("/", 1)[-1].replace("_beats.json", "")
+
+w = wave.open(WAV,"rb"); sr,n = w.getframerate(), w.getnframes()
 s = array.array('h'); s.frombytes(w.readframes(n)); w.close()
 dur = n/sr
 
@@ -82,6 +86,5 @@ print(f"tracked {len(times)} beats, first {times[0]:.3f}s last {times[-1]:.3f}s"
 print(f"mean interval {avg:.4f}s ({60/avg:.2f} BPM), sd {var*1000:.1f}ms")
 print(f"coverage: {times[-1]-times[0]:.1f}s of {dur:.1f}s")
 
-json.dump({"songId":"demo_song","bpm":round(60/avg,2),"beats":times},
-          open("demo_song_beats.json","w"))
-print("wrote demo_song_beats.json")
+json.dump({"songId":SONG_ID,"bpm":round(60/avg,2),"beats":times}, open(OUT,"w"))
+print(f"wrote {OUT}  (sd {var*1000:.1f}ms -- under ~15ms means a confident track)")

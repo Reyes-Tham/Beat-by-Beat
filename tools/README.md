@@ -15,16 +15,24 @@ lag → Ellis-style dynamic-programming beat tracking.
 afconvert -f WAVE -d LEI16@22050 -c 1 song.mp4 analysis.wav
 
 # 2. audio track for the app
-afconvert -f m4af -d aac -b 128000 song.mp4 demo_song.m4a
+afconvert -f m4af -d aac -b 128000 song.mp4 demo_song_2.m4a
 
 # 3. beat grid
-python3 beat_reader.py          # reads analysis.wav, writes demo_song_beats.json
+python3 beat_reader.py analysis.wav demo_song_2_beats.json
 ```
+
+Then add a `Song` to `Song.catalog` with the reported BPM, and drop both
+files into `BeatByBeat/Resources/`.
 
 Check the reported interval standard deviation. Under ~15 ms means a confident
 track on a steady tempo; much higher means the estimate needs a listen before
 it is trusted.
 
-Detected pulses are often every *other* beat (a backbeat). `finegrid` style
-interpolation of midpoints recovers the full grid; because every difficulty's
-spacing is even, notes still land on detected beats.
+Detected pulses are sometimes every *other* beat — a backbeat. Judge it by the
+reported tempo: if it lands implausibly slow for the track (demo_song came out
+at 71.9), run `finegrid.py <beats.json>` to interpolate midpoints and recover
+the real grid. If the tempo is already plausible (demo_song_2 at 117.4), leave
+it alone — doubling it would invent beats the song does not have.
+
+After interpolating, only *even* indices are detected beats, which is why every
+difficulty's spacing is even.

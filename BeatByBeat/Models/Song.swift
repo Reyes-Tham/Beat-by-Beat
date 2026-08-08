@@ -40,6 +40,15 @@ struct Song: Identifiable, Hashable {
             duration: 129
         ),
         Song(
+            id: "demo_song_2",
+            title: "Afro Vibes",
+            movementFocus: "Slower pulse, long recovery between reaches",
+            bpm: 117.41,
+            audioResource: "demo_song_2",
+            beatMapResource: "demo_song_2_beats",
+            duration: 240
+        ),
+        Song(
             id: "steady_60",
             title: "Slow Steady",
             movementFocus: "Long single reaches, maximum rest",
@@ -62,15 +71,6 @@ struct Song: Identifiable, Hashable {
             title: "Walking Pace",
             movementFocus: "Moderate tempo, wider reaches",
             bpm: 120,
-            audioResource: nil,
-            beatMapResource: nil,
-            duration: nil
-        ),
-        Song(
-            id: "steady_150",
-            title: "Bright Step",
-            movementFocus: "Quick changes, shorter recovery",
-            bpm: 150,
             audioResource: nil,
             beatMapResource: nil,
             duration: nil
