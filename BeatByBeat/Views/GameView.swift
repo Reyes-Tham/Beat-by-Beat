@@ -63,6 +63,7 @@ struct GameView: View {
             }
         }
         .padding(28)
+        .fixedSize(horizontal: false, vertical: true)
         .frame(minWidth: 380, minHeight: 340)
     }
 

@@ -50,8 +50,10 @@ struct SongSelectionView: View {
             HStack(alignment: .top, spacing: 28) {
                 songList
                     .frame(width: 280)
+                    .fixedSize(horizontal: false, vertical: true)
                 runSettings
                     .frame(width: 760)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 22)
@@ -94,7 +96,7 @@ struct SongSelectionView: View {
             }
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 1130, minHeight: 480)
+        .frame(minWidth: 1130, minHeight: 660)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
