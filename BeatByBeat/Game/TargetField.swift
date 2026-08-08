@@ -270,7 +270,7 @@ final class TargetField {
         _ position: SIMD3<Float>,
         _ radius: Float
     ) -> Bool {
-        distance(palm.proxy.position, position) <= palm.proxy.radius + radius
+        palm.proxy.touches(position, radius: radius)
     }
 
     /// Grip is a movement, not a pose: the open hand has to be seen at the
@@ -286,8 +286,10 @@ final class TargetField {
         songTime: TimeInterval
     ) {
         // Grasp point, not the wrist: the object has to be *in the hand*.
+        // Grip still tests the grasp point rather than the whole hand: an
+        // object has to be between the fingers, not merely overlapping the arm.
         let inHand = distance(palm.proxy.gripPosition, target.position)
-            <= palm.proxy.radius + component.radius
+            <= HandProxy.defaultRadius + component.radius
         let turned = component.gripOrientation.map {
             $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
         } ?? true

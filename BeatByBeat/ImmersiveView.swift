@@ -51,7 +51,7 @@ struct ImmersiveView: View {
             }
 
             for hand in [TrainingHand.left, .right] {
-                let marker = TargetEntity.makeHandProxyMarker(radius: HandProxy.defaultRadius)
+                let marker = TargetEntity.makeHandProxyMarker(radius: 1)
                 marker.isEnabled = false
                 content.add(marker)
                 proxyMarkers[hand] = marker
@@ -379,8 +379,13 @@ struct ImmersiveView: View {
             let position = box.point(at: unit)
             let proxy = HandProxy(
                 position: position,
+                wrist: position,
                 gripPosition: position,
-                radius: HandProxy.simulatedRadius,
+                // Same shape as a real hand, just aligned to the world since
+                // the stand-in has no wrist to take a direction from.
+                radii: SIMD3(HandProxy.simulatedRadius,
+                             HandProxy.simulatedRadius * 0.8,
+                             HandProxy.simulatedRadius * 1.6),
                 updatedAt: 0,
                 // No fingers to close in the Simulator, so the stand-in
                 // alternates open and shut on a slow cycle. That way the
@@ -421,7 +426,13 @@ struct ImmersiveView: View {
             if let proxy = palms.first(where: { $0.hand == hand })?.proxy {
                 marker.isEnabled = appModel.showHandProxy
                 marker.position = proxy.position
-                marker.scale = .init(repeating: proxy.radius / HandProxy.defaultRadius)
+                // Unit sphere scaled to the semi-axes and rotated into the
+                // hand's frame, so the debug shape is exactly what the hit test
+                // uses rather than an approximation of it.
+                marker.orientation = simd_quatf(simd_float3x3(
+                    proxy.lateral, proxy.normal, proxy.forward
+                ))
+                marker.scale = proxy.radii
             } else {
                 marker.isEnabled = false
             }
