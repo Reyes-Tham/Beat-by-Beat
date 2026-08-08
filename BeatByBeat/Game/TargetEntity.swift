@@ -326,19 +326,64 @@ enum TargetEntity {
         )
     }
 
-    nonisolated static let hitAnimationSeconds: TimeInterval = 0.18
+    nonisolated static let hitAnimationSeconds: TimeInterval = 0.12
+    nonisolated static let dustSeconds: TimeInterval = 1.2
 
-    /// Burst outward on contact, so a hit is unmistakable even in peripheral
-    /// vision. Caller removes the entity once this finishes.
+    /// Collapse on contact, quickly, so the dust burst reads as the sphere
+    /// coming apart rather than as something separate happening next to it.
     static func playHitAnimation(on entity: Entity) {
-        var burst = entity.transform
-        burst.scale = .init(repeating: 1.7)
+        var collapsed = entity.transform
+        collapsed.scale = .init(repeating: 0.01)
         entity.move(
-            to: burst,
+            to: collapsed,
             relativeTo: entity.parent,
             duration: hitAnimationSeconds,
-            timingFunction: .easeOut
+            timingFunction: .easeIn
         )
+    }
+
+    /// A puff of fine dust in the target's own colour.
+    ///
+    /// Parented by the caller to the field root, not to the target — the
+    /// target is destroyed within a couple of frames and would take the
+    /// particles with it.
+    static func makeDustBurst(hand: TrainingHand, radius: Float) -> Entity {
+        let entity = Entity()
+        entity.name = "Dust"
+
+        var particles = ParticleEmitterComponent()
+        particles.emitterShape = .sphere
+        particles.emitterShapeSize = .init(repeating: radius * 0.75)
+        particles.birthLocation = .volume
+        particles.birthDirection = .normal
+        particles.speed = 0.32
+        particles.speedVariation = 0.24
+        particles.isEmitting = true
+
+        particles.mainEmitter.birthRate = 2600
+        particles.mainEmitter.lifeSpan = 0.65
+        particles.mainEmitter.lifeSpanVariation = 0.35
+        // Fine: small enough to read as dust rather than as debris.
+        particles.mainEmitter.size = 0.0035
+        particles.mainEmitter.sizeVariation = 0.0022
+        particles.mainEmitter.color = .evolving(
+            start: .single(tint(for: hand)),
+            end: .single(.init(white: 1, alpha: 0))
+        )
+        particles.mainEmitter.opacityCurve = .easeFadeOut
+        particles.mainEmitter.blendMode = .additive
+        // A little gravity so the cloud settles instead of hanging.
+        particles.mainEmitter.acceleration = [0, -0.45, 0]
+        particles.mainEmitter.dampingFactor = 2.4
+
+        entity.components.set(particles)
+        return entity
+    }
+
+    /// Stops emission so the existing particles finish their lifespan and the
+    /// cloud fades out, rather than the burst continuing to feed itself.
+    static func stopDust(_ entity: Entity) {
+        entity.components[ParticleEmitterComponent.self]?.isEmitting = false
     }
 
     // MARK: - Appearance

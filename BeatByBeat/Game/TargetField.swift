@@ -50,6 +50,8 @@ final class TargetField {
     private(set) var judgements: [Judgement: Int] = [:]
     /// Called after any scoring change so the UI can update.
     var onScoreChange: (() -> Void)?
+    /// Ding played on contact. Nil until the resource finishes loading.
+    var hitSound: AudioFileResource?
 
     private let root: Entity
     private let outline: Entity
@@ -244,6 +246,7 @@ final class TargetField {
 
         TargetEntity.removeApproachShell(from: target)
         TargetEntity.playHitAnimation(on: target)
+        showShatter(hand: component.hand, at: target.position)
 
         let wasPractice = mode == .practice
         if wasPractice { pendingSpawns += 1 }
@@ -259,6 +262,33 @@ final class TargetField {
             // believe a spawn was still pending and never top the field up.
             self.pendingSpawns = max(0, self.pendingSpawns - 1)
             self.refill(avoiding: self.lastPalms)
+        }
+    }
+
+    /// Dust burst plus the hit sound, at the reached target's position.
+    ///
+    /// Both are parented to the field root rather than the target: the target
+    /// collapses and is destroyed within a couple of frames, and would take
+    /// the particles and the audio player with it.
+    private func showShatter(hand: TrainingHand, at position: SIMD3<Float>) {
+        let dust = TargetEntity.makeDustBurst(hand: hand, radius: TargetEntity.defaultRadius)
+        dust.position = position
+        root.addChild(dust)
+
+        if let hitSound {
+            // Spatial, so the ding comes from where the hand actually is —
+            // useful feedback in its own right when a target is off to one side.
+            dust.spatialAudio = SpatialAudioComponent()
+            dust.playAudio(hitSound)
+        }
+
+        Task {
+            // Emit for a moment, then let the existing particles live out
+            // their lifespan so the cloud thins rather than cutting off.
+            try? await Task.sleep(for: .milliseconds(90))
+            TargetEntity.stopDust(dust)
+            try? await Task.sleep(for: .seconds(TargetEntity.dustSeconds))
+            TargetEntity.destroy(dust)
         }
     }
 

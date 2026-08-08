@@ -19,6 +19,7 @@ struct ImmersiveView: View {
     @State private var confirmRoot = Entity()
     @State private var previewRoot = Entity()
     @State private var lastCalibrationTick: TimeInterval = 0
+    @State private var hitSound: AudioFileResource?
 
     var body: some View {
         RealityView { content in
@@ -57,6 +58,7 @@ struct ImmersiveView: View {
         .task {
             // Every hand update is also a hit-test tick — no separate timer.
             handTracking.onUpdate = { runHitTest() }
+            await loadHitSound()
             await handTracking.start()
             appModel.handTrackingStatus = handTracking.status
         }
@@ -121,6 +123,22 @@ struct ImmersiveView: View {
         // Real hands re-test at 90 Hz from their own anchor updates.
         if appModel.simulateHandWithMouse, appModel.simulatedPalmUnit != nil {
             runHitTest()
+        }
+    }
+
+    private func loadHitSound() async {
+        do {
+            // Held in view state, not written straight to the field: `.task`
+            // can run before RealityView's make closure, so the field may not
+            // exist yet. applySettings hands it over once both are ready.
+            hitSound = try await AudioFileResource(
+                named: "hit_ding.caf",
+                configuration: .init(shouldLoop: false)
+            )
+            field?.hitSound = hitSound
+        } catch {
+            // Not fatal: the shatter and praise still land, just silently.
+            print("[Audio] hit sound unavailable: \(error)")
         }
     }
 
@@ -295,6 +313,7 @@ struct ImmersiveView: View {
         field.mode = appModel.mode
         field.volume = appModel.volume
         field.volumeForHand = { appModel.volume(for: $0) }
+        field.hitSound = hitSound
         field.layout = appModel.layout
         field.hand = appModel.trainingHand
         field.targetCount = appModel.targetCount
