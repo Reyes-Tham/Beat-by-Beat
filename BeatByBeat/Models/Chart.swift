@@ -57,9 +57,12 @@ struct ChartNote: Codable, Equatable {
     var movement: MovementType = .reach
     /// How the hand must be turned. Grip notes only.
     var gripOrientation: GripOrientation?
+    /// Where a gripped object has to be carried to, in unit space.
+    var carryUnit: SIMD3<Float>?
 
     private enum CodingKeys: String, CodingKey {
         case time, travel, hand, x, y, z, movement, gripOrientation
+        case carryX, carryY, carryZ
     }
 
     init(
@@ -68,8 +71,10 @@ struct ChartNote: Codable, Equatable {
         hand: TrainingHand,
         unit: SIMD3<Float>,
         movement: MovementType = .reach,
-        gripOrientation: GripOrientation? = nil
+        gripOrientation: GripOrientation? = nil,
+        carryUnit: SIMD3<Float>? = nil
     ) {
+        self.carryUnit = carryUnit
         self.time = time
         self.travel = travel
         self.hand = hand
@@ -93,6 +98,11 @@ struct ChartNote: Codable, Equatable {
         gripOrientation = try container.decodeIfPresent(
             GripOrientation.self, forKey: .gripOrientation
         )
+        if let cx = try container.decodeIfPresent(Float.self, forKey: .carryX),
+           let cy = try container.decodeIfPresent(Float.self, forKey: .carryY),
+           let cz = try container.decodeIfPresent(Float.self, forKey: .carryZ) {
+            carryUnit = SIMD3(cx, cy, cz)
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -105,6 +115,9 @@ struct ChartNote: Codable, Equatable {
         try container.encode(unit.z, forKey: .z)
         try container.encode(movement, forKey: .movement)
         try container.encodeIfPresent(gripOrientation, forKey: .gripOrientation)
+        try container.encodeIfPresent(carryUnit?.x, forKey: .carryX)
+        try container.encodeIfPresent(carryUnit?.y, forKey: .carryY)
+        try container.encodeIfPresent(carryUnit?.z, forKey: .carryZ)
     }
 }
 
@@ -167,9 +180,19 @@ extension Chart {
             // Cycled independently of the movement palette, so each selected
             // orientation still comes round evenly when grips are sparse.
             var orientation: GripOrientation?
+            var carry: SIMD3<Float>?
             if movement == .grip {
-                orientation = grips[gripIndex % grips.count]
+                let picked = grips[gripIndex % grips.count]
                 gripIndex += 1
+                orientation = picked
+                // Clamped into the arm's own box so the destination is
+                // reachable; flipped if the clamp left it too close to be a
+                // carry rather than a nudge.
+                var destination = box.clamp(position + picked.carryOffset(for: noteHand))
+                if distance(destination, position) < 0.15 {
+                    destination = box.clamp(position - picked.carryOffset(for: noteHand))
+                }
+                carry = destination
             }
             notes.append(ChartNote(
                 time: beats[index],
@@ -179,7 +202,8 @@ extension Chart {
                 hand: noteHand,
                 unit: position,
                 movement: movement,
-                gripOrientation: orientation
+                gripOrientation: orientation,
+                carryUnit: carry
             ))
             index += spacing
             placed += 1

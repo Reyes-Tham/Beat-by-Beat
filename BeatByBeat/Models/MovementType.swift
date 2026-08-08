@@ -31,7 +31,7 @@ enum MovementType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .reach: "Move the hand to a target"
         case .pour: "Guide the hand along a curved path"
-        case .grip: "Close the hand on the target"
+        case .grip: "Pick it up, carry it, and set it down"
         }
     }
 
@@ -49,7 +49,9 @@ enum MovementType: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .reach: 1.0
         case .pour: 1.5
-        case .grip: 1.25
+        // Two legs now — reach to it, then carry it somewhere — so it needs
+        // roughly twice a plain reach rather than a little extra.
+        case .grip: 2.0
         }
     }
 }

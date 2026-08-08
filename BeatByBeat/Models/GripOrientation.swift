@@ -46,6 +46,18 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Where the object has to be carried to, as an offset in unit space.
+    ///
+    /// Chosen to match the object: a mug slides across the surface it is on,
+    /// while something picked up overhand is lifted and set down higher. Both
+    /// legs stay inside the arm's own calibrated box.
+    func carryOffset(for hand: TrainingHand) -> SIMD3<Float> {
+        switch self {
+        case .cup:      [0.34 * (hand == .left ? 1 : -1), 0, 0]  // across, toward the midline
+        case .overhand: [0, 0.30, 0]                              // lift and place higher
+        }
+    }
+
     /// Cosine of the widest acceptable error, ~41°.
     ///
     /// The two orientations are 90° apart, so anything looser than cos(45°)

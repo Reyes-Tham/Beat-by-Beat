@@ -25,6 +25,12 @@ struct TargetComponent: Component {
     /// Consecutive frames the hand has held the pose being waited for. Hand
     /// tracking is noisy enough that a single frame is not evidence.
     var gripFrames: Int = 0
+    /// Grip targets only: currently being carried.
+    var gripHeld: Bool = false
+    /// Where a carried target has to be set down, in world space.
+    var carryDestination: SIMD3<Float>?
+    /// Where it started, so a drop can put it back.
+    var origin: SIMD3<Float> = .zero
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
@@ -275,6 +281,40 @@ enum TargetEntity {
 
             c.strokePath()
         }
+    }
+
+    /// Hollow marker showing where a carried target has to be set down.
+    ///
+    /// Front-face culled so it reads as an open space to put something into
+    /// rather than as another ball to hit.
+    static func makeDropZone(hand: TrainingHand, radius: Float, noteIndex: Int) -> Entity {
+        let root = Entity()
+        root.name = "Drop#\(noteIndex)"
+
+        let shell = ModelEntity(
+            mesh: .generateSphere(radius: radius * 1.35),
+            materials: [gripRingMaterial(tint: tint(for: hand), opacity: 0.16)]
+        )
+        shell.name = "DropShell"
+        root.addChild(shell)
+
+        // A floor dot so the destination is locatable even edge-on.
+        let pip = ModelEntity(
+            mesh: .generateSphere(radius: radius * 0.16),
+            materials: [material(tint: tint(for: hand), opacity: 1.0)]
+        )
+        root.addChild(pip)
+        return root
+    }
+
+    /// Brightens the drop zone once the object is inside it, so "carry here"
+    /// and "let go now" look different.
+    static func setDropZoneActive(_ zone: Entity, active: Bool, hand: TrainingHand) {
+        guard let shell = zone.findEntity(named: "DropShell") as? ModelEntity else { return }
+        shell.model?.materials = [
+            gripRingMaterial(tint: active ? .white : tint(for: hand),
+                             opacity: active ? 0.5 : 0.16)
+        ]
     }
 
     /// Brightens the ring once the open hand has been seen, so the patient can

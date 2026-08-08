@@ -133,7 +133,8 @@ final class TargetField {
         beatTime: TimeInterval? = nil,
         travelTime: TimeInterval = 1,
         movement: MovementType = .reach,
-        gripOrientation: GripOrientation? = nil
+        gripOrientation: GripOrientation? = nil,
+        carryDestination: SIMD3<Float>? = nil
     ) -> Entity {
         let target = TargetEntity.make(
             hand: hand, radius: radius, noteIndex: noteIndex,
@@ -142,6 +143,16 @@ final class TargetField {
         target.position = position
         target.components[TargetComponent.self]?.beatTime = beatTime
         target.components[TargetComponent.self]?.travelTime = travelTime
+        target.components[TargetComponent.self]?.origin = position
+        target.components[TargetComponent.self]?.carryDestination = carryDestination
+
+        if let carryDestination {
+            let zone = TargetEntity.makeDropZone(
+                hand: hand, radius: radius, noteIndex: noteIndex
+            )
+            zone.position = carryDestination
+            root.addChild(zone)
+        }
         root.addChild(target)
         TargetEntity.playSpawnAnimation(on: target)
         if beatTime != nil {
@@ -202,7 +213,8 @@ final class TargetField {
             beatTime: note.time,
             travelTime: note.travel,
             movement: note.movement,
-            gripOrientation: note.gripOrientation
+            gripOrientation: note.gripOrientation,
+            carryDestination: note.carryUnit.map { box.point(at: $0) }
         )
     }
 
@@ -216,7 +228,9 @@ final class TargetField {
         for target in activeTargets {
             guard let component = target.components[TargetComponent.self],
                   let beatTime = component.beatTime,
-                  songTime > beatTime + component.travelTime
+                  songTime > beatTime + component.travelTime,
+                  // Never yank something out of a hand that is carrying it.
+                  !component.gripHeld
             else { continue }
 
             target.components.remove(TargetComponent.self)
@@ -227,6 +241,7 @@ final class TargetField {
             // Stop the countdown too, or the shell keeps shrinking on a target
             // that is already on its way out.
             TargetEntity.removeApproachShell(from: target)
+            if let zone = dropZone(for: component.noteIndex) { TargetEntity.destroy(zone) }
             TargetEntity.playMissAnimation(on: target)
             Task {
                 try? await Task.sleep(for: .seconds(TargetEntity.missAnimationSeconds))
@@ -285,6 +300,14 @@ final class TargetField {
         palm: (hand: TrainingHand, proxy: HandProxy),
         songTime: TimeInterval
     ) {
+        // Once it is being carried the object goes where the hand goes, and
+        // releasing is what ends the note — so this branch runs before any of
+        // the proximity checks below.
+        if component.gripHeld {
+            carry(target, component: component, palm: palm, songTime: songTime)
+            return
+        }
+
         // Grasp point, not the wrist: the object has to be *in the hand*.
         let inHand = distance(palm.proxy.gripPosition, target.position)
             <= palm.proxy.radius + component.radius
@@ -327,10 +350,63 @@ final class TargetField {
         }
 
         state.gripFrames = palm.proxy.isGripping ? state.gripFrames + 1 : 0
-        target.components.set(state)
         if state.gripFrames >= Self.gripHoldFrames {
-            retire(target, component: component, songTime: songTime)
+            // Picked up. With no destination this is the whole movement.
+            guard state.carryDestination != nil else {
+                target.components.set(state)
+                retire(target, component: state, songTime: songTime)
+                return
+            }
+            state.gripHeld = true
+            state.gripFrames = 0
+            TargetEntity.removeApproachShell(from: target)
         }
+        target.components.set(state)
+    }
+
+    /// Carrying: the object follows the hand until it is released.
+    ///
+    /// Released inside the drop zone scores. Released anywhere else is a drop,
+    /// and the object goes back to where it started so the movement can be
+    /// tried again rather than being lost.
+    private func carry(
+        _ target: Entity,
+        component: TargetComponent,
+        palm: (hand: TrainingHand, proxy: HandProxy),
+        songTime: TimeInterval
+    ) {
+        guard let destination = component.carryDestination else { return }
+
+        target.position = palm.proxy.gripPosition
+        let overZone = distance(target.position, destination)
+            <= component.radius + TargetEntity.defaultRadius * 1.35
+        if let zone = dropZone(for: component.noteIndex) {
+            TargetEntity.setDropZoneActive(zone, active: overZone, hand: component.hand)
+        }
+
+        // An unknown pose is not an open hand, so a tracking gap can't be
+        // mistaken for letting go.
+        guard palm.proxy.handKnown, palm.proxy.isOpen else { return }
+
+        var state = component
+        state.gripFrames += 1
+        target.components.set(state)
+        guard state.gripFrames >= Self.gripHoldFrames else { return }
+
+        if overZone {
+            retire(target, component: state, songTime: songTime)
+        } else {
+            state.gripHeld = false
+            state.gripArmed = false
+            state.gripFrames = 0
+            target.components.set(state)
+            target.position = state.origin
+            TargetEntity.setGripArmed(target, armed: false, hand: state.hand)
+        }
+    }
+
+    private func dropZone(for noteIndex: Int) -> Entity? {
+        root.children.first { $0.name == "Drop#\(noteIndex)" }
     }
 
     /// Frames a grip pose must persist before it counts. Hand updates arrive at
@@ -381,6 +457,7 @@ final class TargetField {
         onScoreChange?()
 
         TargetEntity.removeApproachShell(from: target)
+        if let zone = dropZone(for: component.noteIndex) { TargetEntity.destroy(zone) }
         TargetEntity.playHitAnimation(on: target)
         showShatter(hand: component.hand, at: target.position)
 
