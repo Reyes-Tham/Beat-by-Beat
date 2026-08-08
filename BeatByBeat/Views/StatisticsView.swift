@@ -120,8 +120,9 @@ struct StatisticsView: View {
             HStack(alignment: .top, spacing: 22) {
                 panel("Reach heatmap") {
                     ReachHeatmapView(session: session)
-                    Text("Green where targets were reached, red where they were "
-                         + "missed. Bigger cells were asked for more often.")
+                    Text("Fixed view from the patient's front-right. Green where "
+                         + "targets were reached, red where they were missed; "
+                         + "bigger cells were asked for more often.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
