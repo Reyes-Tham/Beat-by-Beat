@@ -99,13 +99,14 @@ enum ReachLevel: Int, CaseIterable, Identifiable, Codable {
     /// Vertical band of the volume, 0 = bottom.
     ///
     /// Starts as a narrow band at chest height — the natural resting height for
-    /// a reach — and opens upward at level 3. It opens downward less than
-    /// upward: gravity assists a downward reach, so lifting is the demand
-    /// worth adding.
+    /// a reach — and opens at level 3, mostly upward: 10% of the box downward
+    /// against 35% up. Gravity assists a downward reach, so lifting is the
+    /// demand worth adding, and a band that opened equally both ways would have
+    /// spent half of "adds height" on the easier direction.
     var heightRange: ClosedRange<Float> {
         switch self {
         case .one, .two: 0.40...0.60
-        case .three, .four, .five: 0.12...0.92
+        case .three, .four, .five: 0.30...0.95
         }
     }
 
