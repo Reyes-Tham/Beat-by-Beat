@@ -452,6 +452,7 @@ struct ImmersiveView: View {
         appModel.isRecentring = calibration.phase == .recentring
         appModel.recenterProgress = calibration.recenterProgress
         appModel.recenterAwaitingHead = calibration.awaitingHead
+        appModel.recenterSeat = calibration.currentHead
     }
 
     /// Coloured lights orbiting the play volume. Developer mode only.

@@ -97,11 +97,24 @@ struct HeadAnchor: Codable, Equatable {
         yaw = atan2(-forward.x, -forward.z)
     }
 
-    /// The space origin, facing -Z — which is where visionOS puts the origin
-    /// relative to the player when the immersive space opens. So this is the
-    /// best available guess at a seat that was never recorded, and it is the
-    /// same guess the box fit makes, which is what keeps the two consistent.
+    /// The space origin, facing -Z. Used as the frame to fit a box in when a
+    /// capture recorded no seat: only the *facing* of a frame affects a fit,
+    /// since the position subtracts out again, so the origin is as good as any.
     static let identity = HeadAnchor(position: .zero, yaw: 0)
+
+    /// What to assume about a seat that was never recorded, given where the
+    /// patient is now.
+    ///
+    /// visionOS puts the space origin on the floor beneath the player, facing
+    /// -Z, so horizontally and in facing the origin is the best guess at where
+    /// they were. Height is deliberately *not* guessed from it. The origin is
+    /// on the floor and a seat is at head height, so taking it literally lifts
+    /// the whole workspace by about 1.3 m — which is what it did, before this
+    /// existed. Assuming they are the height they are now makes that axis a
+    /// no-op instead of a metre of error.
+    static func assumedPrevious(matching current: HeadAnchor) -> HeadAnchor {
+        HeadAnchor(position: [0, current.position.y, 0], yaw: 0)
+    }
 
     var rotation: simd_quatf { simd_quatf(angle: yaw, axis: [0, 1, 0]) }
 
@@ -211,15 +224,11 @@ struct CalibrationProfile: Codable, Equatable {
     /// turned points — which is only true because the fit happens in the
     /// patient's frame. See `ArmBoundary.volume(safetyScale:in:)`.
     ///
-    /// A profile with no recorded seat is taken to have been measured at the
-    /// space origin facing forward, which is where visionOS puts the origin
-    /// relative to the player. It is a guess, but it is the same guess the box
-    /// fit makes — and one consistent guess moves such a profile onto the
-    /// patient, where two different ones left it sitting inside out.
+    /// A profile with no recorded seat is placed by `assumedPrevious`.
     func recentred(to newAnchor: HeadAnchor) -> CalibrationProfile {
         var moved = self
         moved.anchor = newAnchor
-        let old = anchor ?? .identity
+        let old = anchor ?? .assumedPrevious(matching: newAnchor)
 
         moved.arms = arms.mapValues { boundary in
             var shifted = boundary

@@ -150,9 +150,19 @@ struct RecenterScreen: View {
         } else {
             ProgressView(value: Double(appModel.recenterProgress))
                 .tint(.green)
-            Text("Holding steady — this locks in on its own.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Holding steady — this locks in on its own.")
+                if let seat = appModel.recenterSeat {
+                    Spacer()
+                    // What it can actually see, so "it didn't move" and "it
+                    // didn't see me move" are tellable apart without a headset.
+                    Text(String(format: "%.2f m high · facing %.0f°",
+                                seat.position.y, seat.yaw * 180 / .pi))
+                        .monospacedDigit()
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 }

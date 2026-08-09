@@ -151,24 +151,35 @@ final class HandTrackingManager {
     }
 
     func start() async {
-        guard HandTrackingProvider.isSupported else {
+        // Head pose and hands are asked for separately, because they are not
+        // available in the same places. Hand tracking used to gate both, so
+        // where hands were unsupported the session never ran at all and there
+        // was no head pose either — which silently made recentring impossible
+        // rather than merely untested.
+        let handsSupported = HandTrackingProvider.isSupported
+        if !handsSupported {
+            print("[HandTracking] hands not supported here — expected in the Simulator.")
+        }
+
+        var providers: [any DataProvider] = []
+        if handsSupported { providers.append(provider) }
+        if WorldTrackingProvider.isSupported { providers.append(worldTracking) }
+
+        guard !providers.isEmpty else {
             status = .unsupported
-            print("[HandTracking] not supported here — expected in the Simulator.")
             return
         }
 
-        let authorizations = await session.requestAuthorization(for: [.handTracking])
-        guard authorizations[.handTracking] == .allowed else {
-            status = .denied
-            print("[HandTracking] authorization denied.")
-            return
+        if handsSupported {
+            let authorizations = await session.requestAuthorization(for: [.handTracking])
+            guard authorizations[.handTracking] == .allowed else {
+                status = .denied
+                print("[HandTracking] authorization denied.")
+                return
+            }
         }
 
         do {
-            // One session for both: hand anchors and head pose are needed
-            // together, and calibration confirms with a head-direction dwell.
-            var providers: [any DataProvider] = [provider]
-            if WorldTrackingProvider.isSupported { providers.append(worldTracking) }
             try await session.run(providers)
         } catch {
             status = .failed("\(error)")
@@ -176,6 +187,12 @@ final class HandTrackingManager {
             return
         }
 
+        // Reports on the hands specifically, which is what the panel means by
+        // it. A head pose without hands is still worth having.
+        guard handsSupported else {
+            status = .unsupported
+            return
+        }
         status = .running
         updateTask = Task { [weak self] in
             guard let self else { return }

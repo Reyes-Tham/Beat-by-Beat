@@ -281,14 +281,13 @@ class AppModel {
     /// Moves the boxes the game reads, and the stored profile with them so its
     /// record goes on describing the same reach.
     ///
-    /// A workspace with no recorded seat is taken to sit at the space origin
-    /// facing forward — where the default boxes are, and where visionOS puts
-    /// the origin relative to the player. So the first recentre moves things
-    /// like any other rather than quietly doing nothing.
+    /// A workspace with no recorded seat is placed by
+    /// `HeadAnchor.assumedPrevious`, so the first recentre moves it like any
+    /// other rather than quietly doing nothing.
     @discardableResult
     func recentreWorkspace(to anchor: HeadAnchor) -> Bool {
         defer { workspaceAnchor = anchor }
-        let old = workspaceAnchor ?? .identity
+        let old = workspaceAnchor ?? .assumedPrevious(matching: anchor)
 
         let moved = anchor.position - old.position
         let turned = anchor.facingChange(from: old)
@@ -404,6 +403,8 @@ class AppModel {
     /// 0...1 while the head is held in one place.
     var recenterProgress: Float = 0
     var recenterAwaitingHead = true
+    /// The seat being read right now, for the readout on the recentre screen.
+    var recenterSeat: HeadAnchor?
     private(set) var recenterRequests = 0
     private(set) var recenterAcceptRequests = 0
     private(set) var recenterCancelRequests = 0
