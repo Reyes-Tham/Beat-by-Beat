@@ -133,39 +133,12 @@ struct RecenterScreen: View {
         Text("Sit the way you'll be playing and look straight ahead.")
             .font(.title3)
 
-        Text("Your saved reach moves to wherever you are now, so the targets "
+        Text("Your saved reach moves onto wherever you are now — a different "
+             + "chair, a different height, facing a different way. The targets "
              + "land in the same places relative to you.")
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-
-        // A workspace with no recorded seat has nothing to be moved *from*, so
-        // the first recentre can only note where they are. Saying so beats
-        // pressing Start and watching nothing happen — which is exactly how
-        // this looked when captures were failing to record a seat at all.
-        if appModel.workspaceAnchor == nil {
-            Label("This is the first one, so it notes where you're sitting. From "
-                  + "the next one on, the workspace moves onto wherever you are.",
-                  systemImage: "info.circle")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-
-        // Moving the box handles a different chair; it cannot handle facing a
-        // different way, because the workspace is square to the room. Saying so
-        // is the difference between a patient reaching sideways all session and
-        // one who takes the two minutes to measure again.
-        if let turn = appModel.recenterTurn, turn > 0.44 {
-            Label(
-                "You're facing about \(Int(turn * 180 / .pi))° from where this was "
-                + "measured. Turn back toward where you played before, or calibrate again.",
-                systemImage: "arrow.trianglehead.counterclockwise.rotate.90"
-            )
-            .font(.callout)
-            .foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
-        }
 
         if appModel.recenterAwaitingHead {
             // Expected on the Simulator, which reports no head pose at all.

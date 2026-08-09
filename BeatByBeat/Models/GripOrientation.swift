@@ -39,10 +39,18 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
     ///
     /// The cup grip mirrors: each hand closes toward the body's midline, so a
     /// right hand's palm faces left and a left hand's faces right.
-    func requiredPalmNormal(for hand: TrainingHand) -> SIMD3<Float> {
+    ///
+    /// Turned by the workspace's facing, because "toward the midline" is a
+    /// direction on the patient, not in the room. Squared to the room it asked
+    /// a patient sitting sideways to turn their palm out to their own left.
+    /// Overhand needs no turning: palm-down is palm-down whichever way anyone
+    /// is facing, gravity being the reference.
+    func requiredPalmNormal(for hand: TrainingHand, yaw: Float = 0) -> SIMD3<Float> {
         switch self {
-        case .cup:      [hand == .left ? 1 : -1, 0, 0]
-        case .overhand: [0, -1, 0]
+        case .cup:
+            simd_quatf(angle: yaw, axis: [0, 1, 0]).act([hand == .left ? 1 : -1, 0, 0])
+        case .overhand:
+            [0, -1, 0]
         }
     }
 
@@ -55,8 +63,9 @@ enum GripOrientation: String, CaseIterable, Identifiable, Codable {
     /// scores neither, which is the honest answer.
     static let tolerance: Float = 0.75
 
-    func matches(palmNormal: SIMD3<Float>, hand: TrainingHand) -> Bool {
+    func matches(palmNormal: SIMD3<Float>, hand: TrainingHand, yaw: Float = 0) -> Bool {
         guard length(palmNormal) > 0.1 else { return true }  // unknown → don't block
-        return dot(normalize(palmNormal), requiredPalmNormal(for: hand)) >= Self.tolerance
+        return dot(normalize(palmNormal), requiredPalmNormal(for: hand, yaw: yaw))
+            >= Self.tolerance
     }
 }

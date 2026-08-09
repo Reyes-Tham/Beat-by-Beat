@@ -39,33 +39,35 @@ struct ArmBoundary: Codable, Equatable {
     /// moving — that limit is the headset's, not the patient's.
     var trackingLimited: [String]
 
-    var reachedCenter: SIMD3<Float> {
-        let (lo, hi) = bounds
-        return (lo + hi) / 2
-    }
+    /// The box the six points fit in, measured along the patient's own axes.
+    ///
+    /// Fitted in their frame rather than the room's. "Forward" has to mean
+    /// forward *for them*: a patient sitting at 30° to the room reaches along
+    /// their own axes, and a box squared to the room around those same points
+    /// comes out both larger and wrong — wide where they are shallow, and
+    /// deep where they are narrow.
+    ///
+    /// Gameplay never uses the full reached box: targets at the very edge of
+    /// comfortable reach invite trunk compensation and overbalancing.
+    func volume(safetyScale: Float, in anchor: HeadAnchor?) -> SpawnVolume {
+        let frame = anchor ?? .identity
+        let local = points.values.map { frame.toLocal($0) }
 
-    var reachedSize: SIMD3<Float> {
-        let (lo, hi) = bounds
-        // A degenerate axis would make every target unreachable, so hold a
-        // floor. Hitting it means that direction wasn't really captured.
-        return simd_max(hi - lo, SIMD3<Float>(0.20, 0.18, 0.12))
-    }
-
-    private var bounds: (SIMD3<Float>, SIMD3<Float>) {
-        let values = Array(points.values)
-        guard var lo = values.first else { return (.zero, .zero) }
+        guard var lo = local.first else { return .fixed }
         var hi = lo
-        for point in values {
+        for point in local {
             lo = simd_min(lo, point)
             hi = simd_max(hi, point)
         }
-        return (lo, hi)
-    }
 
-    /// Gameplay never uses the full reached box: targets at the very edge of
-    /// comfortable reach invite trunk compensation and overbalancing.
-    func volume(safetyScale: Float) -> SpawnVolume {
-        SpawnVolume(center: reachedCenter, size: reachedSize * safetyScale)
+        // A degenerate axis would make every target unreachable, so hold a
+        // floor. Hitting it means that direction wasn't really captured.
+        let size = simd_max(hi - lo, SIMD3<Float>(0.20, 0.18, 0.12))
+        return SpawnVolume(
+            center: frame.toWorld((lo + hi) / 2),
+            size: size * safetyScale,
+            yaw: frame.yaw
+        )
     }
 }
 
@@ -93,6 +95,24 @@ struct HeadAnchor: Codable, Equatable {
         position = SIMD3(head.columns.3.x, head.columns.3.y, head.columns.3.z)
         let forward = -SIMD3<Float>(head.columns.2.x, head.columns.2.y, head.columns.2.z)
         yaw = atan2(-forward.x, -forward.z)
+    }
+
+    /// The space origin, facing -Z — which is where visionOS puts the origin
+    /// relative to the player when the immersive space opens. So this is the
+    /// best available guess at a seat that was never recorded, and it is the
+    /// same guess the box fit makes, which is what keeps the two consistent.
+    static let identity = HeadAnchor(position: .zero, yaw: 0)
+
+    var rotation: simd_quatf { simd_quatf(angle: yaw, axis: [0, 1, 0]) }
+
+    /// A room point as the patient would describe it: so far to their right,
+    /// so far above their eyes, so far in front.
+    func toLocal(_ world: SIMD3<Float>) -> SIMD3<Float> {
+        rotation.inverse.act(world - position)
+    }
+
+    func toWorld(_ local: SIMD3<Float>) -> SIMD3<Float> {
+        position + rotation.act(local)
     }
 
     /// Smallest angle between two facings, radians. Wrapped, so a pair either
@@ -155,7 +175,7 @@ struct CalibrationProfile: Codable, Equatable {
     }
 
     func volume(for hand: TrainingHand) -> SpawnVolume? {
-        boundary(for: hand)?.volume(safetyScale: safetyScale)
+        boundary(for: hand)?.volume(safetyScale: safetyScale, in: anchor)
     }
 
     var trackingLimitedSteps: [String] {
@@ -185,39 +205,30 @@ struct CalibrationProfile: Codable, Equatable {
     /// left finds every target half a metre to their right — which looks like
     /// the calibration was wrong rather than merely somewhere else.
     ///
-    /// A shift, not a full rigid transform. Turning the six points about the
-    /// new facing is the mathematically tidier move, but `SpawnVolume` is
-    /// axis-aligned, so the box is refitted around the turned points and comes
-    /// out bigger — at 15° a shallow workspace gains about 40% of depth, and
-    /// every target on that axis lands past where the patient can reach. A
-    /// shift preserves the measured extents exactly. What the facing is for is
-    /// telling the patient when it has changed enough to matter; see
-    /// `facingChange(from:)`.
+    /// A full rigid move: every point keeps its place relative to the patient,
+    /// so a new chair and a new facing are the same operation. The box that
+    /// comes out is the measured one turned, not a larger box fitted around
+    /// turned points — which is only true because the fit happens in the
+    /// patient's frame. See `ArmBoundary.volume(safetyScale:in:)`.
     ///
-    /// A profile with no anchor adopts the new one without moving anything: its
-    /// points can only be assumed to have been measured where they sit, and
-    /// from then on it recentres like any other.
+    /// A profile with no recorded seat is taken to have been measured at the
+    /// space origin facing forward, which is where visionOS puts the origin
+    /// relative to the player. It is a guess, but it is the same guess the box
+    /// fit makes — and one consistent guess moves such a profile onto the
+    /// patient, where two different ones left it sitting inside out.
     func recentred(to newAnchor: HeadAnchor) -> CalibrationProfile {
         var moved = self
         moved.anchor = newAnchor
-        guard let old = anchor else { return moved }
+        let old = anchor ?? .identity
 
-        let shift = newAnchor.position - old.position
         moved.arms = arms.mapValues { boundary in
             var shifted = boundary
-            shifted.points = boundary.points.mapValues { $0 + shift }
+            shifted.points = boundary.points.mapValues {
+                newAnchor.toWorld(old.toLocal($0))
+            }
             return shifted
         }
         return moved
-    }
-
-    /// How far the patient has turned since this was measured, radians.
-    ///
-    /// Beyond a modest angle the saved box no longer lines up with the way they
-    /// are facing, and no amount of moving it will fix that — the honest answer
-    /// there is to measure again.
-    func facingChange(from newAnchor: HeadAnchor) -> Float? {
-        anchor.map { newAnchor.facingChange(from: $0) }
     }
 
     var summary: String {

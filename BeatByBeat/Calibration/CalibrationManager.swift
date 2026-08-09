@@ -397,10 +397,13 @@ final class CalibrationManager {
     }
 
     /// Live boundary for the arm in progress, for the preview dots.
+    ///
+    /// Full extents, not the 85% gameplay uses: this is showing the patient
+    /// what they have reached, not where targets will go.
     var currentBox: SpawnVolume? {
         guard !points.isEmpty else { return nil }
-        let boundary = ArmBoundary(points: points, trackingLimited: [])
-        return SpawnVolume(center: boundary.reachedCenter, size: boundary.reachedSize)
+        return ArmBoundary(points: points, trackingLimited: [])
+            .volume(safetyScale: 1, in: captureAnchor)
     }
 
     /// 90th percentile rather than the maximum: a single tracking glitch can

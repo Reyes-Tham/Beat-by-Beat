@@ -88,6 +88,9 @@ struct SettingsView: View {
     private var manualSection: some View {
         @Bindable var appModel = appModel
         let workspace = appModel.manualWorkspace(for: editingArm)
+        // Taken in the patient's own axes, so "distance" stays the distance in
+        // front of them however their chair is turned.
+        let centre = appModel.workspaceCentre(for: editingArm)
 
         section("Manual workspace") {
             // One source, stated plainly. There used to be a switch choosing
@@ -110,12 +113,12 @@ struct SettingsView: View {
             Text("Centre")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            armSlider("Height", value: workspace.center.y, range: 0.70...1.70,
-                      onChange: update { $0.center.y = $1 })
-            armSlider("Distance", value: -workspace.center.z, range: 0.25...1.00,
-                      onChange: update { $0.center.z = -$1 })
-            armSlider("Sideways", value: workspace.center.x, range: -0.60...0.60,
-                      onChange: update { $0.center.x = $1 })
+            armSlider("Height", value: centre.y, range: 0.70...1.70,
+                      onChange: moveCentre { $0.y = $1 })
+            armSlider("Distance", value: -centre.z, range: 0.25...1.00,
+                      onChange: moveCentre { $0.z = -$1 })
+            armSlider("Sideways", value: centre.x, range: -0.60...0.60,
+                      onChange: moveCentre { $0.x = $1 })
 
             Text("Size")
                 .font(.caption)
@@ -135,6 +138,17 @@ struct SettingsView: View {
             Button("Reset this arm to defaults") {
                 appModel.setManualWorkspace(.default(for: editingArm), for: editingArm)
             }
+        }
+    }
+
+    /// Moves the box's centre along the patient's own axes.
+    private func moveCentre(
+        _ change: @escaping (inout SIMD3<Float>, Float) -> Void
+    ) -> (Float) -> Void {
+        { newValue in
+            var centre = appModel.workspaceCentre(for: editingArm)
+            change(&centre, newValue)
+            appModel.setWorkspaceCentre(centre, for: editingArm)
         }
     }
 

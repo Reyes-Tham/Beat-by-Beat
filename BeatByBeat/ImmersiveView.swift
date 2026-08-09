@@ -452,9 +452,6 @@ struct ImmersiveView: View {
         appModel.isRecentring = calibration.phase == .recentring
         appModel.recenterProgress = calibration.recenterProgress
         appModel.recenterAwaitingHead = calibration.awaitingHead
-        appModel.recenterTurn = calibration.currentHead.flatMap {
-            appModel.calibration?.facingChange(from: $0)
-        }
     }
 
     /// Coloured lights orbiting the play volume. Developer mode only.
@@ -559,6 +556,7 @@ struct ImmersiveView: View {
         field.mode = appModel.mode
         field.volume = appModel.volume
         field.volumeForHand = { appModel.volume(for: $0) }
+        field.workspaceYaw = appModel.workspaceYaw
         field.hitSound = hitSound
         field.spawnSound = spawnSound
         field.layout = appModel.layout

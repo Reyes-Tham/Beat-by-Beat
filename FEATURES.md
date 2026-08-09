@@ -77,15 +77,29 @@ session spends the patient's freshest minutes on setup.
 
 With a reach already on file, the launch screen instead asks only for the thing
 that genuinely changes between sessions: **where they are sitting**. The head
-pose is read, and the whole workspace shifts onto it. It locks in on its own
+pose is read, and the whole workspace is moved onto it. It locks in on its own
 once the head has been still for 1.5 s — nothing to press, nothing to reach for
 — and a *Start* button takes the position immediately.
 
+**A different chair, a different height and a different direction are all the
+same operation.** Each box keeps its position *and its orientation relative to
+the patient*, so a patient who has turned ninety degrees to face the window gets
+the same reaches, turned with them. Nothing is refitted, so the measured extents
+survive a turn exactly.
+
+That works because the reach box is fitted in the patient's own axes rather than
+the room's, and carries its own facing. "Forward" has to mean forward *for
+them*. A box squared to the room around the same points comes out both larger
+and wrong — wide where the patient is shallow, deep where they are narrow — and
+would grow further every time it was turned.
+
+Everything measured relative to the patient turns with them, including the grip
+orientations: *cup* asks for a palm toward their midline, which is a direction
+on the body, not in the room.
+
 The screen shows the saved reach in centimetres, when it was measured and when
 it was last played, so a stale or wrong capture gets noticed rather than reused
-silently. If the patient is facing more than about 25° away from where the
-reach was measured, it says so and suggests recalibrating: shifting a box
-handles a different chair, but it cannot handle facing a different way.
+silently.
 
 ### The workspace sliders
 
@@ -97,6 +111,11 @@ A finished calibration writes its measurements into them, and the next
 calibration overwrites them again. So a therapist can nudge a boundary after a
 capture without redoing it, and what they read in Settings is always where
 targets are going.
+
+They are also read in the patient's own axes: *distance* is how far in front of
+them the box sits and *sideways* is how far to one side, whichever way their
+chair is turned. Height stays measured from the floor, which is a number that
+can be checked against a chair.
 
 ---
 
@@ -304,9 +323,10 @@ practice, less practice slows progress, and slower progress costs motivation.
   available in small steps that are genuinely achievable rather than one
   all-at-once jump.
 - **Setup is not a barrier to starting.** The returning patient sits down, holds
-  still for a second and a half, and plays. Or says "recenter". The cost of
-  beginning a session is close to zero, which matters more for daily adherence
-  than anything inside the session.
+  still for a second and a half, and plays. Or says "recenter". They can sit
+  somewhere different, at a different height, facing a different way, and it is
+  still one button. The cost of beginning a session is close to zero, which
+  matters more for daily adherence than anything inside the session.
 - **A per-session score and a visible trend** give the feedback that supervision
   otherwise provides — someone noticing that today went better than last time.
 
@@ -410,6 +430,6 @@ Stated plainly, because the gaps matter as much as the features:
   this but does not measure it.
 - **It has no export, sync or clinician portal.** All data is on the device.
 - **It has no reminders or scheduling.**
-- **It cannot correct for facing.** The workspace is square to the room, so
-  turning to face a different direction needs a fresh calibration rather than a
-  recentre.
+- **It cannot tell a chair apart from a wheelchair, or standing from sitting.**
+  It only knows where the head is; a patient who recentres while leaning gets a
+  workspace built around the lean.

@@ -41,6 +41,8 @@ final class TargetField {
     var volume: SpawnVolume = .fixed
     /// Per-arm boundary. Each arm's targets are placed in its own box.
     var volumeForHand: ((TrainingHand) -> SpawnVolume)?
+    /// Which way the workspace faces, for orientations asked of the hand.
+    var workspaceYaw: Float = 0
     var layout: TargetLayout = .grid
     var hand: TrainingHand = .both
     var targetCount: Int = 3
@@ -298,7 +300,9 @@ final class TargetField {
         let inHand = distance(palm.proxy.gripPosition, target.position)
             <= HandProxy.defaultRadius + component.radius
         let turned = component.gripOrientation.map {
-            $0.matches(palmNormal: palm.proxy.palmNormal, hand: component.hand)
+            $0.matches(palmNormal: palm.proxy.palmNormal,
+                       hand: component.hand,
+                       yaw: workspaceYaw)
         } ?? true
         guard inHand, turned else { return }
 

@@ -218,6 +218,31 @@ class AppModel {
         didSet { ManualWorkspace.saveAll(manualWorkspaces) }
     }
 
+    /// The frame the workspace sliders speak in: where the patient is standing
+    /// and which way they face, with height left alone.
+    ///
+    /// Height stays measured from the floor because that is a number a nurse
+    /// can check against a chair. Distance and sideways only mean anything
+    /// relative to the person, so those are taken in their frame — which for a
+    /// patient facing forward at the origin is exactly what the sliders did
+    /// before boxes could turn.
+    var workspaceFrame: HeadAnchor {
+        guard let anchor = workspaceAnchor else { return .identity }
+        return HeadAnchor(position: [anchor.position.x, 0, anchor.position.z], yaw: anchor.yaw)
+    }
+
+    /// Centre of an arm's box as the sliders talk about it: height above the
+    /// floor, distance in front, and offset to the side.
+    func workspaceCentre(for hand: TrainingHand) -> SIMD3<Float> {
+        workspaceFrame.toLocal(manualWorkspace(for: hand).volume.center)
+    }
+
+    func setWorkspaceCentre(_ local: SIMD3<Float>, for hand: TrainingHand) {
+        var workspace = manualWorkspace(for: hand)
+        workspace.center = workspaceFrame.toWorld(local)
+        setManualWorkspace(workspace, for: hand)
+    }
+
     func manualWorkspace(for hand: TrainingHand) -> ManualWorkspace {
         manualWorkspaces[hand.rawValue] ?? .default(for: hand)
     }
@@ -228,14 +253,7 @@ class AppModel {
 
     /// Union of the hand-set boxes, for anything needing one volume.
     var manualVolume: SpawnVolume {
-        let boxes = [TrainingHand.left, .right].map { manualWorkspace(for: $0).volume }
-        var lo = boxes[0].minBound
-        var hi = boxes[0].maxBound
-        for box in boxes.dropFirst() {
-            lo = simd_min(lo, box.minBound)
-            hi = simd_max(hi, box.maxBound)
-        }
-        return SpawnVolume(center: (lo + hi) / 2, size: hi - lo)
+        .union([TrainingHand.left, .right].map { manualWorkspace(for: $0).volume })
     }
 
     /// Calibration result, when there is one.
@@ -254,25 +272,36 @@ class AppModel {
 
     /// Moves the workspace onto where the patient is sitting now.
     ///
-    /// Shifts the boxes the game reads, and the stored profile with them so its
-    /// record goes on describing the same reach. Reports whether anything
-    /// actually moved: with no anchor to measure from, a first recentre can
-    /// only adopt the position.
+    /// A rigid move, seat and facing together: each box keeps its position and
+    /// orientation *relative to the patient*, so a different chair, a different
+    /// height and a different direction are all the same operation. Nothing is
+    /// refitted, so the measured extents survive untouched however far they
+    /// have turned.
+    ///
+    /// Moves the boxes the game reads, and the stored profile with them so its
+    /// record goes on describing the same reach.
+    ///
+    /// A workspace with no recorded seat is taken to sit at the space origin
+    /// facing forward — where the default boxes are, and where visionOS puts
+    /// the origin relative to the player. So the first recentre moves things
+    /// like any other rather than quietly doing nothing.
     @discardableResult
     func recentreWorkspace(to anchor: HeadAnchor) -> Bool {
         defer { workspaceAnchor = anchor }
-        guard let old = workspaceAnchor else { return false }
+        let old = workspaceAnchor ?? .identity
 
-        let shift = anchor.position - old.position
-        guard length(shift) > 0.005 else { return false }
+        let moved = anchor.position - old.position
+        let turned = anchor.facingChange(from: old)
+        guard length(moved) > 0.005 || turned > 0.01 else { return false }
 
-        var moved = manualWorkspaces
+        var boxes = manualWorkspaces
         for hand in [TrainingHand.left, .right] {
             var workspace = manualWorkspace(for: hand)
-            workspace.center += shift
-            moved[hand.rawValue] = workspace
+            workspace.center = anchor.toWorld(old.toLocal(workspace.center))
+            workspace.yaw += anchor.yaw - old.yaw
+            boxes[hand.rawValue] = workspace
         }
-        manualWorkspaces = moved
+        manualWorkspaces = boxes
         calibration = calibration?.recentred(to: anchor)
         return true
     }
@@ -303,15 +332,12 @@ class AppModel {
 
     /// Union of both arms, for the outline and for practice layout.
     var volume: SpawnVolume {
-        let boxes = [TrainingHand.left, .right].map { volume(for: $0) }
-        var lo = boxes[0].minBound
-        var hi = boxes[0].maxBound
-        for box in boxes.dropFirst() {
-            lo = simd_min(lo, box.minBound)
-            hi = simd_max(hi, box.maxBound)
-        }
-        return SpawnVolume(center: (lo + hi) / 2, size: hi - lo)
+        .union([TrainingHand.left, .right].map { volume(for: $0) })
     }
+
+    /// Which way the workspace faces. Grip orientations are asked for relative
+    /// to the patient, so they need this too.
+    var workspaceYaw: Float { manualWorkspace(for: .right).yaw }
 
     // MARK: - Live readouts
 
@@ -378,9 +404,6 @@ class AppModel {
     /// 0...1 while the head is held in one place.
     var recenterProgress: Float = 0
     var recenterAwaitingHead = true
-    /// How far the patient is turned from where the saved reach was measured,
-    /// radians. Nil when there is no head pose, or nothing to compare against.
-    var recenterTurn: Float?
     private(set) var recenterRequests = 0
     private(set) var recenterAcceptRequests = 0
     private(set) var recenterCancelRequests = 0
