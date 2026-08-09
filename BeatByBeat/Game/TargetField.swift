@@ -424,7 +424,14 @@ final class TargetField {
         palm: (hand: TrainingHand, proxy: HandProxy),
         songTime: TimeInterval
     ) {
-        guard touches(palm, target.position, component.radius) else { return }
+        guard touches(palm, target.position, component.radius) else {
+            // Stops the buzz dead the moment the hand leaves, which is what
+            // makes it mean "this is counting" rather than "this is a hold
+            // target". Progress itself is kept: a hold survives a break, since
+            // an arm that slips off and comes back has not failed.
+            if component.held > 0 { TargetEntity.settleHold(target) }
+            return
+        }
 
         let now = CACurrentMediaTime()
         var holding = component

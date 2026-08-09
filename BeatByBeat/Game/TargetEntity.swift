@@ -151,12 +151,49 @@ enum TargetEntity {
 
     /// Fills the halo as the hold accumulates.
     static func updateHold(_ entity: Entity, progress: Float) {
+        let filled = min(1, progress)
+
+        if let ring = entity.findEntity(named: "HoldRing") {
+            ring.components.set(OpacityComponent(opacity: 0.15 + 0.75 * filled))
+            // Draws in toward the sphere as it fills, so a full hold reads as
+            // the halo having closed on the target rather than merely got
+            // brighter.
+            ring.scale = SIMD3(repeating: 1 - 0.28 * filled)
+        }
+
+        // The sphere buzzes under the hand, harder the longer it is held.
+        //
+        // A hold is the one movement where nothing about the arm changes once
+        // it arrives, so without this the target looks identical whether the
+        // patient is holding it or has drifted off and gone still. The buzz
+        // only advances while contact is being reported, which makes it a
+        // direct readout of "this is counting" — and it gives the effort
+        // somewhere to show, the way a held note does.
+        let offset = shakeOffset(strength: 0.0012 + 0.0022 * filled)
+        entity.findEntity(named: "Core")?.position = offset
+        // Moved with it, or the letter floats off the face of its own sphere.
+        entity.findEntity(named: "HandLetter")?.position =
+            [offset.x, offset.y, defaultRadius + 0.008 + offset.z]
+    }
+
+    /// Two frequencies that don't divide into each other, so the movement
+    /// stays irregular instead of settling into a visible loop.
+    private static func shakeOffset(strength: Float) -> SIMD3<Float> {
+        let time = Float(CACurrentMediaTime())
+        return [
+            sin(time * 97) * strength,
+            sin(time * 61 + 1.7) * strength,
+            sin(time * 79 + 0.4) * strength * 0.5
+        ]
+    }
+
+    /// Puts the sphere back where it belongs once a hold lapses.
+    static func settleHold(_ entity: Entity) {
+        entity.findEntity(named: "Core")?.position = .zero
+        entity.findEntity(named: "HandLetter")?.position = [0, 0, defaultRadius + 0.008]
         guard let ring = entity.findEntity(named: "HoldRing") else { return }
-        ring.components.set(OpacityComponent(opacity: 0.15 + 0.75 * min(1, progress)))
-        // Draws in toward the sphere as it fills, so a full hold reads as the
-        // halo having closed on the target rather than merely got brighter.
-        let scale = 1 - 0.28 * min(1, progress)
-        ring.scale = SIMD3(repeating: scale)
+        ring.components.set(OpacityComponent(opacity: 0.15))
+        ring.scale = .one
     }
 
     /// Number of waypoints along a pour path.
