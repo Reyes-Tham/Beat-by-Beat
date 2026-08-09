@@ -19,9 +19,21 @@ struct SettingsView: View {
 
         NavigationStack {
             ScrollView {
+                // Three columns, not two. Everything used to sit in two, which
+                // ran to 1378 points of content in a 720 point sheet — so half
+                // the panel was reachable only by scrolling, including the
+                // controls a therapist needs mid-session. Spread across three
+                // the tallest column is what sets the height, and nothing is
+                // hidden at the size the sheet opens at.
                 HStack(alignment: .top, spacing: 28) {
                     VStack(alignment: .leading, spacing: 22) {
                         calibrationSection
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 380)
+
+                    VStack(alignment: .leading, spacing: 22) {
+                        manualSection
                         Spacer(minLength: 0)
                     }
                     .frame(width: 380)
@@ -31,24 +43,20 @@ struct SettingsView: View {
 
                         Divider()
 
-                        manualSection
-
-                        Divider()
-
                         section("Developer mode") {
-                        Toggle("Disco lights, 6× speed, dancing cats",
-                               isOn: $appModel.developerMode)
-                        Text("For showing the app off, not for a session. "
-                             + "Off by default and remembered between launches.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if appModel.developerMode {
-                            Text(String(format: "Charts run at %.0f× speed.",
-                                        appModel.developerSpeed))
+                            Toggle("Disco lights, 6× speed, dancing cats",
+                                   isOn: $appModel.developerMode)
+                            Text("For showing the app off, not for a session. "
+                                 + "Off by default and remembered between launches.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if appModel.developerMode {
+                                Text(String(format: "Charts run at %.0f× speed.",
+                                            appModel.developerSpeed))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                    }
 
                         Divider()
 
@@ -69,6 +77,7 @@ struct SettingsView: View {
                     .frame(width: 380)
                 }
                 .padding(30)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -77,7 +86,10 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 880, height: 720)
+        // Sized to the content rather than guessed: the three columns
+        // measure 726 points including their padding, and the navigation bar
+        // sits above them. Nothing here should need scrolling to reach.
+        .frame(width: 1256, height: 820)
     }
 
     /// Per-arm box editor.

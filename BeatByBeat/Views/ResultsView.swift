@@ -95,5 +95,9 @@ private struct SmileyFace: View {
     ResultsView(
         score: SessionScore(points: 1450, reached: 22, excellent: 8, good: 9, date: Date())
     ) {}
-    .frame(width: 620, height: 640)
+    // Height is a floor, not a fixed box: a longer summary should push the
+    // panel taller rather than being cut off by it.
+    .fixedSize(horizontal: false, vertical: true)
+    .frame(width: 620)
+    .frame(minHeight: 640)
 }

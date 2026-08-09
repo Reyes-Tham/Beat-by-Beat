@@ -37,21 +37,19 @@ struct CalibrationScreen: View {
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if appModel.immersiveSpaceState != .open {
-                        waitingForSpace
-                    } else if appModel.calibrationIsConfirming {
-                        confirmStep
-                    } else {
-                        captureStep
-                    }
-
-                    if showsHandPad { HandPad() }
+            VStack(alignment: .leading, spacing: 16) {
+                if appModel.immersiveSpaceState != .open {
+                    waitingForSpace
+                } else if appModel.calibrationIsConfirming {
+                    confirmStep
+                } else {
+                    captureStep
                 }
-                .padding(.horizontal, 36)
-                .padding(.vertical, 20)
+
+                if showsHandPad { HandPad() }
             }
+            .padding(.horizontal, 36)
+            .padding(.vertical, 20)
 
             Divider()
 
@@ -83,9 +81,11 @@ struct CalibrationScreen: View {
             .padding(.horizontal, 36)
             .padding(.vertical, 18)
         }
-        // Taller with the pad, which brings its own 200-odd points. At the
-        // shorter floor the scroll view swallowed the depth slider, and a
-        // control you have to scroll to find is one nobody finds.
+        // Sizes to its content rather than scrolling inside a fixed box. The
+        // floor is a floor, not a cap: it stops the panel resizing as the steps
+        // change height, and the pad brings its own 200-odd points when it is
+        // there. Nothing gets swallowed either way.
+        .fixedSize(horizontal: false, vertical: true)
         .frame(minWidth: 620, minHeight: showsHandPad ? 820 : 640)
         .sheet(isPresented: $showSettings) {
             SettingsView()
