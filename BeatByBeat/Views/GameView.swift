@@ -13,6 +13,40 @@ struct GameView: View {
     @Environment(AppModel.self) private var appModel
     @Binding var showSettings: Bool
 
+    /// Reached in a row, and the best run so far.
+    ///
+    /// The best is what stays on screen once a chain ends. Nothing marks the
+    /// end of one — no sound, no flash, no zero flashing up — because a broken
+    /// streak is a punishment, and a slow arm is not something to punish. The
+    /// number a patient walks away remembering only ever rises.
+    @ViewBuilder
+    private var chainCounter: some View {
+        if appModel.bestChain >= 2 {
+            HStack(spacing: 8) {
+                Image(systemName: "link")
+                    .font(.caption)
+                if appModel.chain >= 2 {
+                    Text("Chain \(appModel.chain)")
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: appModel.chain)
+                } else {
+                    Text("Best chain \(appModel.bestChain)")
+                }
+            }
+            .font(.callout)
+            .monospacedDigit()
+            .foregroundStyle(appModel.chain >= 2 ? AnyShapeStyle(.tint)
+                                                 : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(.thinMaterial))
+            // Grows a little as the run gets longer, so a good stretch is felt
+            // rather than merely counted. Capped, or it would take the panel.
+            .scaleEffect(1 + min(0.25, Double(appModel.chain) * 0.012))
+            .animation(.snappy, value: appModel.chain)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
@@ -42,6 +76,9 @@ struct GameView: View {
                 Text("points")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                chainCounter
+                    .padding(.top, 6)
             }
 
             NextTargetBar(

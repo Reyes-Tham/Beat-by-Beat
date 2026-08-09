@@ -342,6 +342,9 @@ class AppModel {
 
     var hitCount = 0
     var missedCount = 0
+    /// Targets reached in a row, and the best run so far this session.
+    var chain = 0
+    var bestChain = 0
     var judgements: [Judgement: Int] = [:]
     var handTrackingStatus: HandTrackingManager.Status = .idle
 

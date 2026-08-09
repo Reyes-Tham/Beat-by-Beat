@@ -326,7 +326,12 @@ struct SongSelectionView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Movements")
                 .font(.headline)
-            HStack(spacing: 10) {
+            // Wraps rather than squeezing: five across left each card too
+            // narrow to read its description, and the panel has a fixed width.
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
+                spacing: 10
+            ) {
                 ForEach(MovementType.allCases) { movement in
                     let isOn = appModel.enabledMovements.contains(movement)
                     Button {

@@ -174,11 +174,20 @@ extension Chart {
                 orientation = grips[gripIndex % grips.count]
                 gripIndex += 1
             }
+            // Travel spans real beats, so it tracks any tempo drift in the
+            // song instead of assuming a constant period. Capped at the gap to
+            // the note before it: the slower movements stretch their approach
+            // by up to 1.6x, which at some levels is longer than the spacing —
+            // and a target that appears before the last one's beat has passed
+            // puts two of them in the air for the same arm.
+            let approach = (beats[index] - beats[index - travelBeats])
+                * movement.travelMultiplier
+            let gap = index >= spacing
+                ? beats[index] - beats[index - spacing]
+                : Double.greatestFiniteMagnitude
             notes.append(ChartNote(
                 time: beats[index],
-                // Travel spans real beats, so it tracks any tempo drift in the
-                // song instead of assuming a constant period.
-                travel: (beats[index] - beats[index - travelBeats]) * movement.travelMultiplier,
+                travel: min(approach, gap * 0.95),
                 hand: noteHand,
                 unit: position,
                 movement: movement,

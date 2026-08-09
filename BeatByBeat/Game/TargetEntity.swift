@@ -22,6 +22,16 @@ struct TargetComponent: Component {
     /// closing hand now counts. Without this the target scores off whatever
     /// the hand happened to already be doing when it arrived.
     var gripArmed: Bool = false
+    /// Turn targets only: the palm has been seen face-down at the target, so
+    /// turning it up now counts. Same reasoning as `gripArmed` — without the
+    /// first half, a palm that arrives already supinated scores a rotation
+    /// nobody performed.
+    var turnArmed: Bool = false
+    /// Hold targets only: seconds accumulated on the target so far, and when
+    /// the hand was last seen there. Contact is sampled rather than continuous,
+    /// so a gap longer than `holdGap` is treated as having let go.
+    var held: TimeInterval = 0
+    var lastHeldAt: TimeInterval = 0
     var hand: TrainingHand
     /// Radius of the sphere in metres, cached so hit tests don't walk the mesh.
     var radius: Float
@@ -33,6 +43,8 @@ struct TargetComponent: Component {
     var beatTime: TimeInterval?
     /// How long the player was given to reach it, for scaling the timing window.
     var travelTime: TimeInterval = 1
+    /// Hold targets only: how long this one has to be held for.
+    var holdSeconds: TimeInterval = 1.5
 }
 
 enum TargetEntity {
@@ -41,12 +53,20 @@ enum TargetEntity {
     /// forgiving hit volume, and this gets tuned on device.
     nonisolated static let defaultRadius: Float = 0.07
 
+    /// Longest gap in contact that still counts as one continuous hold.
+    ///
+    /// Hit tests run off hand updates, which stop arriving the moment tracking
+    /// blinks. Resetting on the first missing frame would make a hold
+    /// impossible to complete for exactly the patients it is meant for.
+    nonisolated static let holdGap: TimeInterval = 0.35
+
     static func make(
         hand: TrainingHand,
         radius: Float = defaultRadius,
         noteIndex: Int = -1,
         movement: MovementType = .reach,
-        gripOrientation: GripOrientation? = nil
+        gripOrientation: GripOrientation? = nil,
+        holdSeconds: TimeInterval = 1.5
     ) -> Entity {
         if movement == .pour {
             return makePourTube(hand: hand, radius: radius, noteIndex: noteIndex)
@@ -90,15 +110,46 @@ enum TargetEntity {
             }
         }
 
+        // Turn and hold get the same halo, for the same reason: it says the
+        // target wants something once you arrive rather than on contact.
+        if movement == .rotate || movement == .hold {
+            let ring = ModelEntity(
+                mesh: .generateSphere(radius: radius * 1.5),
+                materials: [gripRingMaterial(tint: tint(for: hand))]
+            )
+            ring.name = movement == .rotate ? "TurnRing" : "HoldRing"
+            ring.components.set(OpacityComponent(opacity: movement == .hold ? 0.15 : 1))
+            root.addChild(ring)
+        }
+
         root.components.set(TargetComponent(
             movement: movement,
             gripOrientation: gripOrientation,
             hand: hand,
             radius: radius,
-            noteIndex: noteIndex
+            noteIndex: noteIndex,
+            holdSeconds: holdSeconds
         ))
 
         return root
+    }
+
+    /// Brightens the halo once the palm has been seen face-down, so the
+    /// patient can tell the turn is being counted from the right starting
+    /// point rather than wondering why nothing happened.
+    static func setTurnArmed(_ entity: Entity, hand: TrainingHand) {
+        guard let ring = entity.findEntity(named: "TurnRing") as? ModelEntity else { return }
+        ring.model?.materials = [gripRingMaterial(tint: .white, opacity: 0.55)]
+    }
+
+    /// Fills the halo as the hold accumulates.
+    static func updateHold(_ entity: Entity, progress: Float) {
+        guard let ring = entity.findEntity(named: "HoldRing") else { return }
+        ring.components.set(OpacityComponent(opacity: 0.15 + 0.75 * min(1, progress)))
+        // Draws in toward the sphere as it fills, so a full hold reads as the
+        // halo having closed on the target rather than merely got brighter.
+        let scale = 1 - 0.28 * min(1, progress)
+        ring.scale = SIMD3(repeating: scale)
     }
 
     /// Number of waypoints along a pour path.

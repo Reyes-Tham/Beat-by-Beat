@@ -584,6 +584,8 @@ struct ImmersiveView: View {
         appModel.hitCount = field.hitCount
         appModel.missedCount = field.missedCount
         appModel.judgements = field.judgements
+        appModel.chain = field.chain
+        appModel.bestChain = field.bestChain
     }
 
     // MARK: - Hands
@@ -612,7 +614,12 @@ struct ImmersiveView: View {
                 // No fingers to close in the Simulator, so the stand-in
                 // alternates open and shut on a slow cycle. That way the
                 // open-then-close sequence can still be exercised there.
-                gripClosure: fmod(CACurrentMediaTime(), 2.0) < 1.0 ? 0 : 1
+                gripClosure: fmod(CACurrentMediaTime(), 2.0) < 1.0 ? 0 : 1,
+                // And no wrist to turn, so the palm rolls over on the same
+                // cycle: face-down for the first half, face-up for the second.
+                // Without it a turn target can never be completed without a
+                // headset, since an unknown palm counts as neither half.
+                palmNormal: fmod(CACurrentMediaTime(), 2.0) < 1.0 ? [0, -1, 0] : [0, 1, 0]
             )
             // One mouse can't have two chiralities: when a specific hand is
             // being trained it takes that side, and only with Both does it

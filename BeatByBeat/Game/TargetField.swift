@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import QuartzCore
 import RealityKit
 
 enum TargetLayout: String, CaseIterable, Identifiable {
@@ -50,6 +51,14 @@ final class TargetField {
     private(set) var hitCount = 0
     private(set) var missedCount = 0
     private(set) var judgements: [Judgement: Int] = [:]
+    /// Targets reached in a row, and the longest such run this session.
+    ///
+    /// A miss clears the run without a sound, a flash, or anything else that
+    /// announces it — the best stands, so the number a patient remembers only
+    /// ever goes up. A streak that visibly breaks is a punishment, and there is
+    /// nothing here worth punishing a slow arm for.
+    private(set) var chain = 0
+    private(set) var bestChain = 0
     /// Called after any scoring change so the UI can update.
     var onScoreChange: (() -> Void)?
     /// Per-target outcomes, for the session record.
@@ -113,6 +122,8 @@ final class TargetField {
         hitCount = 0
         missedCount = 0
         judgements = [:]
+        chain = 0
+        bestChain = 0
         redrawOutline()
         if mode == .practice { refill(avoiding: lastPalms) }
         onScoreChange?()
@@ -143,7 +154,12 @@ final class TargetField {
     ) -> Entity {
         let target = TargetEntity.make(
             hand: hand, radius: radius, noteIndex: noteIndex,
-            movement: movement, gripOrientation: gripOrientation
+            movement: movement, gripOrientation: gripOrientation,
+            // Scaled off the travel window rather than fixed, so a hold is
+            // proportionate to the pace the level is running at. Floored so it
+            // is always long enough to be a hold rather than a touch, and
+            // capped so it never outlasts the target.
+            holdSeconds: min(2.5, max(1.0, travelTime * 0.45))
         )
         target.position = position
         target.components[TargetComponent.self]?.beatTime = beatTime
@@ -230,6 +246,7 @@ final class TargetField {
             target.components.remove(TargetComponent.self)
             target.components.remove(CollisionComponent.self)
             missedCount += 1
+            chain = 0
             onMissed?(component)
             onScoreChange?()
 
@@ -268,6 +285,12 @@ final class TargetField {
 
             case .pour:
                 advancePour(target, component: component, palm: palm, songTime: songTime)
+
+            case .rotate:
+                advanceTurn(target, component: component, palm: palm, songTime: songTime)
+
+            case .hold:
+                advanceHold(target, component: component, palm: palm, songTime: songTime)
             }
         }
 
@@ -343,6 +366,85 @@ final class TargetField {
         }
     }
 
+    /// Turning the forearm over: palm face-down at the target, then face-up.
+    ///
+    /// Measured against gravity rather than against the arm, because that is
+    /// what the movement means functionally — taking change, turning a key,
+    /// receiving something into the hand. It also sidesteps the forearm axis
+    /// moving about while the shoulder does, which would otherwise have to be
+    /// subtracted out of every reading.
+    ///
+    /// Supination is the scored direction. It is usually the most restricted
+    /// movement a hemiparetic arm has, while pronation tends to come for free
+    /// with the flexor synergy — so asking for the one that is hard is the
+    /// whole point.
+    private func advanceTurn(
+        _ target: Entity,
+        component: TargetComponent,
+        palm: (hand: TrainingHand, proxy: HandProxy),
+        songTime: TimeInterval
+    ) {
+        guard touches(palm, target.position, component.radius) else { return }
+
+        let normal = palm.proxy.palmNormal
+        guard length(normal) > 0.1 else { return }  // unknown → neither half counts
+        let facing = normalize(normal).y
+
+        if !component.turnArmed {
+            guard facing <= -Self.turnThreshold else { return }
+            var armed = component
+            armed.turnArmed = true
+            target.components.set(armed)
+            TargetEntity.setTurnArmed(target, hand: component.hand)
+            return
+        }
+
+        if facing >= Self.turnThreshold {
+            retire(target, component: component, songTime: songTime)
+        }
+    }
+
+    /// Palm-up and palm-down each want about 66 degrees off horizontal.
+    ///
+    /// That leaves a band in the middle belonging to neither, so a forearm
+    /// resting halfway satisfies nothing — and the two halves together are a
+    /// rotation of roughly 130 degrees, which is a real turn without demanding
+    /// the full range a hemiparetic forearm rarely has.
+    private static let turnThreshold: Float = 0.4
+
+    /// Holding still on the target, which is what carrying a full glass is.
+    ///
+    /// Accumulated rather than continuous, because contact is only sampled when
+    /// a hand update arrives. A gap shorter than `holdGap` is treated as the
+    /// same hold: tracking blinks, and a patient who has to restart every time
+    /// it does can never finish one.
+    private func advanceHold(
+        _ target: Entity,
+        component: TargetComponent,
+        palm: (hand: TrainingHand, proxy: HandProxy),
+        songTime: TimeInterval
+    ) {
+        guard touches(palm, target.position, component.radius) else { return }
+
+        let now = CACurrentMediaTime()
+        var holding = component
+        let gap = now - component.lastHeldAt
+        if component.lastHeldAt > 0, gap <= TargetEntity.holdGap {
+            holding.held += gap
+        }
+        holding.lastHeldAt = now
+        target.components.set(holding)
+
+        TargetEntity.updateHold(
+            target,
+            progress: Float(holding.held / max(0.1, component.holdSeconds))
+        )
+
+        if holding.held >= component.holdSeconds {
+            retire(target, component: holding, songTime: songTime)
+        }
+    }
+
     /// Removes a reached target, scores it, and queues a replacement in
     /// practice mode.
     private func retire(_ target: Entity, component: TargetComponent, songTime: TimeInterval) {
@@ -352,6 +454,8 @@ final class TargetField {
         target.components.remove(CollisionComponent.self)
 
         hitCount += 1
+        chain += 1
+        bestChain = max(bestChain, chain)
         if let beatTime = component.beatTime {
             let judgement = Judgement.judge(
                 offset: songTime - beatTime,

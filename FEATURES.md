@@ -171,7 +171,7 @@ patient quietly compensating with their stronger side.
 
 ### Movement types
 
-Any combination of three, chosen per session:
+Any combination of five, chosen per session:
 
 - **Reach** — move the hand to a target.
 - **Pour** — guide the hand along a curved path through waypoints, as in tipping
@@ -180,6 +180,23 @@ Any combination of three, chosen per session:
 - **Grip** — close the hand on the target. Grip is treated as a *movement*, not
   a pose: the open hand has to be seen at the target first, and only then does
   closing score. A fist arriving already closed does not count.
+- **Turn** — forearm rotation: arrive with the palm face-down, then turn it
+  face-up. Measured against gravity, which is what the movement means
+  functionally — taking change, turning a key, receiving something into the
+  hand. Supination is the scored direction because it is usually the most
+  restricted movement a hemiparetic arm has, while pronation tends to come for
+  free with the flexor synergy. Each half wants about 66° off horizontal,
+  leaving a middle band that counts as neither, so a forearm resting halfway
+  satisfies nothing.
+- **Hold** — keep the hand steady on the target for a second or two, as in
+  holding a full glass. The halo fills and draws in as the hold accumulates.
+  Contact is accumulated rather than required continuously: tracking blinks,
+  and a patient who has to restart every time it does could never finish one.
+
+Movements that ask for something *after* the arm arrives are given longer:
+pour 1.5×, grip 1.25×, turn 1.6×, hold 1.4×. The approach is capped at the gap
+to the previous target, so a stretched one can never put two targets in the air
+for the same arm.
 
 Grip additionally asks for a hand orientation:
 
@@ -214,6 +231,11 @@ they are longer movements.
   for reached at all. Every reach earns something. A "22/25" would tell a
   patient who reached every target but was late that they had failed at the
   thing they had actually done.
+- **A chain counter** shows targets reached in a row, growing slightly as the
+  run lengthens. Nothing marks the end of one — no sound, no flash, no zero
+  flashing up — and the best run stays on screen once a chain ends, so the
+  number a patient walks away remembering only ever rises. A streak that
+  visibly breaks is a punishment, and a slow arm is not something to punish.
 - **A back button** is the only control on screen during play.
 
 ---
