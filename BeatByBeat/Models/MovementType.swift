@@ -26,7 +26,7 @@ enum MovementType: String, CaseIterable, Identifiable, Codable {
         case .reach: "Reach"
         case .pour: "Pour"
         case .grip: "Grip"
-        case .rotate: "Turn"
+        case .rotate: "Flip"
         case .hold: "Hold"
         }
     }
@@ -36,10 +36,15 @@ enum MovementType: String, CaseIterable, Identifiable, Codable {
         case .reach: "Move the hand to a target"
         case .pour: "Guide the hand along a curved path"
         case .grip: "Close the hand on the target"
-        case .rotate: "Turn the palm from face-down to face-up"
+        case .rotate: "Flip the palm from face-down to face-up"
         case .hold: "Keep the hand steady on the target"
         }
     }
+
+    /// Shown over the target itself, for the movements that carry a word
+    /// rather than a picture. Upper case: it is read at a glance from across
+    /// the room, not studied.
+    var targetWord: String { displayName.uppercased() }
 
     var symbol: String {
         switch self {

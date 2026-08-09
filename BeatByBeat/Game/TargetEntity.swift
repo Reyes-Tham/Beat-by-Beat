@@ -105,8 +105,7 @@ enum TargetEntity {
             ring.name = "GripRing"
             root.addChild(ring)
 
-            if let icon = makeIcon(radius: radius, movement: .grip,
-                                   orientation: gripOrientation) {
+            if let icon = makeGripIcon(radius: radius, orientation: gripOrientation) {
                 root.addChild(icon)
             }
         }
@@ -122,11 +121,8 @@ enum TargetEntity {
             ring.components.set(OpacityComponent(opacity: movement == .hold ? 0.15 : 1))
             root.addChild(ring)
 
-            // Same billboarded glyph grip gets: the halo says "something else is
-            // wanted here", the picture says what.
-            if let icon = makeIcon(radius: radius, movement: movement) {
-                root.addChild(icon)
-            }
+            // The halo says something else is wanted here; the word says what.
+            root.addChild(makeWordLabel(radius: radius, text: movement.targetWord))
         }
 
         root.components.set(TargetComponent(
@@ -262,13 +258,8 @@ enum TargetEntity {
     /// Uses a bundled `grip_icon` image when one is present and falls back to a
     /// drawn glyph otherwise — drop a PNG in Resources to replace the artwork
     /// without touching this code.
-    static func makeIcon(
-        radius: Float,
-        movement: MovementType,
-        orientation: GripOrientation? = nil
-    ) -> Entity? {
-        guard let texture = iconTexture(movement: movement, orientation: orientation)
-        else { return nil }
+    static func makeGripIcon(radius: Float, orientation: GripOrientation? = nil) -> Entity? {
+        guard let texture = gripTexture(for: orientation) else { return nil }
 
         var material = UnlitMaterial()
         material.color = .init(tint: .white, texture: .init(texture))
@@ -278,7 +269,7 @@ enum TargetEntity {
         let size = radius * 1.5
         let plane = ModelEntity(mesh: .generatePlane(width: size, height: size), materials: [material])
         let root = Entity()
-        root.name = "MovementIcon"
+        root.name = "GripIcon"
         root.position = [0, radius * 1.85, 0]
         root.addChild(plane)
         root.components.set(BillboardComponent())
@@ -292,20 +283,13 @@ enum TargetEntity {
     /// room, which is most of why the orientations felt indistinguishable.
     nonisolated(unsafe) private static var cachedIcons: [String: TextureResource] = [:]
 
-    private static func iconTexture(
-        movement: MovementType,
-        orientation: GripOrientation?
-    ) -> TextureResource? {
-        // Grip is keyed by orientation, since that is what its picture says;
-        // everything else by the movement.
-        let key = movement == .grip ? (orientation?.rawValue ?? "grip") : movement.rawValue
+    private static func gripTexture(for orientation: GripOrientation?) -> TextureResource? {
+        let key = orientation?.rawValue ?? "grip"
         if let cached = cachedIcons[key] { return cached }
 
-        let image: UIImage = switch (movement, orientation) {
-        case (.grip, .cup): drawMug()
-        case (.grip, _): drawFist()
-        case (.rotate, _): drawTurn()
-        default: drawHold()
+        let image: UIImage = switch orientation {
+        case .cup: drawMug()
+        default: drawFist()
         }
         guard let cgImage = image.cgImage,
               let texture = try? TextureResource(image: cgImage, options: .init(semantic: .color))
@@ -383,77 +367,35 @@ enum TargetEntity {
         }
     }
 
-    /// Curved arrow over a flat palm: the palm says what turns, the arrow says
-    /// which way. Drawn as a near-full circle rather than a short arc, because
-    /// at target size a shallow arc reads as a line.
-    private static func drawTurn(side: CGFloat = 256) -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
-            let c = ctx.cgContext
-            c.setStrokeColor(UIColor.white.cgColor)
-            c.setFillColor(UIColor.white.cgColor)
-            c.setLineWidth(side * 0.055)
-            c.setLineCap(.round)
-            c.setLineJoin(.round)
+    /// The movement's name, floating over the target.
+    ///
+    /// A word rather than a picture for these two. A drawn glyph has to be
+    /// learnt before it says anything, and there is no obvious pictogram for
+    /// "turn your palm over" or "keep still" the way a mug is obvious for a cup
+    /// grasp — so the reading was a guess right up until someone explained it.
+    /// Grip keeps its pictures, where the glyph distinguishes two orientations
+    /// that a word would have to spell out.
+    static func makeWordLabel(radius: Float, text: String) -> Entity {
+        let root = Entity()
+        root.name = "MovementWord"
+        root.position = [0, radius * 1.85, 0]
 
-            let u = side / 100
+        let mesh = MeshResource.generateText(
+            text,
+            extrusionDepth: 0.001,
+            font: .systemFont(ofSize: CGFloat(radius) * 0.62, weight: .bold),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byTruncatingTail
+        )
+        let label = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: .white)])
+        // generateText lays out from the baseline's left edge, so the mesh has
+        // to be shifted back onto the anchor to sit over the target.
+        label.position = -label.visualBounds(relativeTo: nil).center
+        root.addChild(label)
 
-            // Open ring, broken at the top right where the arrowhead goes.
-            c.addPath(UIBezierPath(
-                arcCenter: CGPoint(x: 50 * u, y: 44 * u),
-                radius: 24 * u,
-                startAngle: -.pi * 0.30,
-                endAngle: .pi * 1.62,
-                clockwise: true
-            ).cgPath)
-            c.strokePath()
-
-            // Arrowhead at the open end, pointing the way the palm turns.
-            let head = UIBezierPath()
-            head.move(to: CGPoint(x: 73 * u, y: 20 * u))
-            head.addLine(to: CGPoint(x: 84 * u, y: 34 * u))
-            head.addLine(to: CGPoint(x: 66 * u, y: 37 * u))
-            head.close()
-            c.addPath(head.cgPath)
-            c.fillPath()
-
-            // Flat palm underneath: this is the thing being turned over.
-            c.move(to: CGPoint(x: 24 * u, y: 84 * u))
-            c.addLine(to: CGPoint(x: 76 * u, y: 84 * u))
-            c.strokePath()
-        }
-    }
-
-    /// A ball resting in a cupped palm: something being kept level, which is
-    /// what a hold is. Deliberately unlike the fist, so the two never trade
-    /// places at a distance.
-    private static func drawHold(side: CGFloat = 256) -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
-            let c = ctx.cgContext
-            c.setStrokeColor(UIColor.white.cgColor)
-            c.setLineWidth(side * 0.055)
-            c.setLineCap(.round)
-            c.setLineJoin(.round)
-
-            let u = side / 100
-
-            // The thing being held.
-            c.addEllipse(in: CGRect(x: 34 * u, y: 18 * u, width: 32 * u, height: 32 * u))
-
-            // Cupped palm under it.
-            c.addPath(UIBezierPath(
-                arcCenter: CGPoint(x: 50 * u, y: 52 * u),
-                radius: 30 * u,
-                startAngle: 0,
-                endAngle: .pi,
-                clockwise: true
-            ).cgPath)
-
-            // Wrist.
-            c.move(to: CGPoint(x: 50 * u, y: 82 * u))
-            c.addLine(to: CGPoint(x: 50 * u, y: 92 * u))
-
-            c.strokePath()
-        }
+        root.components.set(BillboardComponent())
+        return root
     }
 
     /// Brightens the ring once the open hand has been seen, so the patient can

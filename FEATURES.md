@@ -180,8 +180,9 @@ Any combination of five, chosen per session:
 - **Grip** — close the hand on the target. Grip is treated as a *movement*, not
   a pose: the open hand has to be seen at the target first, and only then does
   closing score. A fist arriving already closed does not count.
-- **Turn** — forearm rotation: arrive with the palm face-down, then turn it
-  face-up. Measured against gravity, which is what the movement means
+- **Flip** — forearm rotation: arrive with the palm face-down, then turn it
+  face-up. The target carries the word FLIP rather than a picture, since there
+  is no obvious pictogram for turning a palm over. Measured against gravity, which is what the movement means
   functionally — taking change, turning a key, receiving something into the
   hand. Supination is the scored direction because it is usually the most
   restricted movement a hemiparetic arm has, while pronation tends to come for
@@ -189,12 +190,15 @@ Any combination of five, chosen per session:
   leaving a middle band that counts as neither, so a forearm resting halfway
   satisfies nothing.
 - **Hold** — keep the hand steady on the target for a second or two, as in
-  holding a full glass. The halo fills and draws in as the hold accumulates.
+  holding a full glass. Labelled HOLD. The halo fills and draws in as the hold
+  accumulates, and the sphere buzzes under the hand while contact is being
+  counted — harder the longer it has been held, and stopping dead when the hand
+  leaves.
   Contact is accumulated rather than required continuously: tracking blinks,
   and a patient who has to restart every time it does could never finish one.
 
 Movements that ask for something *after* the arm arrives are given longer:
-pour 1.5×, grip 1.25×, turn 1.6×, hold 1.4×. The approach is capped at the gap
+pour 1.5×, grip 1.25×, flip 1.6×, hold 1.4×. The approach is capped at the gap
 to the previous target, so a stretched one can never put two targets in the air
 for the same arm.
 
