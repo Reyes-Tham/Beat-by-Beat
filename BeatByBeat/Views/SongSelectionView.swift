@@ -96,7 +96,13 @@ struct SongSelectionView: View {
             }
             .padding(.vertical, 18)
         }
-        .frame(minWidth: 1130, minHeight: 660)
+        // The inner columns were fixed but this was not, so the panel's *ideal*
+        // height stayed short while its content needed 768 — and a window that
+        // sizes to content took the ideal and clipped the title off the top and
+        // the Play button off the bottom. A minimum alone could not fix that:
+        // a minimum permits a taller window without asking for one.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(minWidth: 1130, minHeight: 780)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
