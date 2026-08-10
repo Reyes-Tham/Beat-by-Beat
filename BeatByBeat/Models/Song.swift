@@ -76,6 +76,15 @@ struct Song: Identifiable, Hashable {
             duration: 144
         ),
         Song(
+            id: "xi_wang_ni",
+            title: "Xi Wang Ni Yi Hou",
+            movementFocus: "Fastest pulse here — short recovery between reaches",
+            bpm: 164.97,
+            audioResource: "xi_wang_ni",
+            beatMapResource: "xi_wang_ni_beats",
+            duration: 287
+        ),
+        Song(
             id: "steady_60",
             title: "Slow Steady",
             movementFocus: "Long single reaches, maximum rest",
