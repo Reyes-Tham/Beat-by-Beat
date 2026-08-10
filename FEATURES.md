@@ -315,15 +315,6 @@ workspace can be compared against what it was, not only read on its own.
 
 ## Access and testing
 
-- **Voice control** — saying **"Calibrate"** opens the reach capture, and
-  **"Recenter"** moves the workspace onto where the patient is sitting. Both are
-  the setup steps that come *before* the app knows anything about their reach,
-  which is exactly when pointing at a control is hardest. Listening happens in
-  the menus only — never during a song, and never during a capture, where acting
-  on the word "calibrate" in conversation would discard the reaches already
-  measured. Recognition is required to be **on-device**; where that is
-  unavailable the feature reports itself unavailable rather than sending audio
-  anywhere. On by default, switchable in Settings.
 - **Minimum-size UI.** Every screen declares the size its content actually
   needs, so nothing is compressed into overlapping rows.
 - **Simulated hand.** A drag pad stands in for a hand so the whole app —
@@ -469,6 +460,9 @@ Stated plainly, because the gaps matter as much as the features:
   this but does not measure it.
 - **It has no export, sync or clinician portal.** All data is on the device.
 - **It has no reminders or scheduling.**
+- **It has no voice control.** Spoken shortcuts to calibration and recentring
+  were built and then removed: claiming the microphone contended with song
+  playback for the audio session, and setup is reachable from the buttons.
 - **It cannot tell a chair apart from a wheelchair, or standing from sitting.**
   It only knows where the head is; a patient who recentres while leaning gets a
   workspace built around the lean.

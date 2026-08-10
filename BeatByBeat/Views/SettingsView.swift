@@ -39,10 +39,6 @@ struct SettingsView: View {
                     .frame(width: 380)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        voiceSection
-
-                        Divider()
-
                         section("Developer mode") {
                             Toggle("Disco lights, 6× speed, dancing cats",
                                    isOn: $appModel.developerMode)
@@ -191,61 +187,6 @@ struct SettingsView: View {
                 value: Binding(get: { value }, set: onChange),
                 in: range
             )
-        }
-    }
-
-    @ViewBuilder
-    private var voiceSection: some View {
-        @Bindable var appModel = appModel
-
-        section("Voice control") {
-            Toggle("Listen for spoken commands", isOn: $appModel.voiceControlEnabled)
-
-            LabeledContent("\"Calibrate\"") { Text("Measure your reach again") }
-            LabeledContent("\"Recenter\"") { Text("Move it onto where you're sitting") }
-
-            Text("Heard only in the menus — never while a song is playing, and "
-                 + "never during a capture, where it would throw away the "
-                 + "directions already measured.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("Recognition happens on the headset. Nothing that is said is "
-                 + "sent anywhere.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            switch appModel.voiceStatus {
-            case .listening:
-                Label("Listening", systemImage: "waveform")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                if !appModel.voiceHeard.isEmpty {
-                    // Shown so a nurse can tell the difference between "it
-                    // isn't hearing me" and "it heard something else".
-                    Text("Heard: \(appModel.voiceHeard)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                }
-            case .denied:
-                Label("Microphone or speech access was refused — it can only be "
-                      + "granted back in the system Settings app.",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            case .unavailable(let reason):
-                Label(reason, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            case .off:
-                Text(appModel.voiceControlEnabled
-                     ? "Starts listening when you're back in the menus."
-                     : "Off.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 

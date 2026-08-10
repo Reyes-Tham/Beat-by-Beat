@@ -172,23 +172,6 @@ class AppModel {
         didSet { simulatedPalmUnit?.z = simulatedPalmDepth }
     }
 
-    /// Spoken shortcuts to the two setup steps.
-    ///
-    /// On by default, and persisted. Someone who cannot comfortably pinch a
-    /// button is the reason this app exists, so the accessible route can't be
-    /// the one that has to be switched on from a button first.
-    ///
-    /// `object(forKey:)` rather than `bool(forKey:)` because that reads a
-    /// missing key as false, which would turn the default off for everyone who
-    /// has never touched the switch.
-    var voiceControlEnabled = UserDefaults.standard.object(forKey: "voiceControl")
-        as? Bool ?? true {
-        didSet { UserDefaults.standard.set(voiceControlEnabled, forKey: "voiceControl") }
-    }
-    /// Mirror of the listener's state, for the settings panel.
-    var voiceStatus: VoiceCommandListener.Status = .off
-    var voiceHeard = ""
-
     /// Disco lights, a speed boost, and dancing cats.
     ///
     /// Off by default and persisted, so it survives a relaunch while never
