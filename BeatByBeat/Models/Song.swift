@@ -106,25 +106,28 @@ struct SessionScore: Codable, Equatable {
     }
 }
 
-/// Best run per song and level, on this device.
+/// Best run per song and mobility setting, on this device.
+///
+/// Keyed by the exact combination of demands rather than by a level number,
+/// so a best set with height on is not compared against one without it.
 enum ScoreStore {
-    private static func key(song: String, level: ReachLevel) -> String {
-        "score.\(song).\(level.rawValue)"
+    private static func key(song: String, mobility: String) -> String {
+        "score.\(song).\(mobility)"
     }
 
-    static func best(song: String, level: ReachLevel) -> SessionScore? {
-        guard let data = UserDefaults.standard.data(forKey: key(song: song, level: level))
+    static func best(song: String, mobility: String) -> SessionScore? {
+        guard let data = UserDefaults.standard.data(forKey: key(song: song, mobility: mobility))
         else { return nil }
         return try? JSONDecoder().decode(SessionScore.self, from: data)
     }
 
     /// Keeps whichever run reached more targets. Ties go to the newer run so a
     /// repeat session still shows as today's.
-    static func record(_ score: SessionScore, song: String, level: ReachLevel) {
-        if let existing = best(song: song, level: level), existing.points > score.points {
+    static func record(_ score: SessionScore, song: String, mobility: String) {
+        if let existing = best(song: song, mobility: mobility), existing.points > score.points {
             return
         }
         guard let data = try? JSONEncoder().encode(score) else { return }
-        UserDefaults.standard.set(data, forKey: key(song: song, level: level))
+        UserDefaults.standard.set(data, forKey: key(song: song, mobility: mobility))
     }
 }

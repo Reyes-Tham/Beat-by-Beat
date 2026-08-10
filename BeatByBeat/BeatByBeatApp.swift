@@ -28,7 +28,7 @@ struct BeatByBeatApp: App {
         // Matched to the tallest panel that opens at launch, so the window
         // doesn't have to grow on the first frame. Content sizing keeps it
         // honest either way.
-        .defaultSize(width: 1256, height: 820)
+        .defaultSize(width: 1256, height: 940)
         .windowResizability(.contentSize)
 
         ImmersiveSpace(id: appModel.immersiveSpaceID) {

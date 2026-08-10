@@ -50,9 +50,9 @@ class AppModel {
     var lastRun: SessionScore?
 
     var selectedSong: Song = .default
-    /// Best previous run for the current song and level, if any.
+    /// Best previous run for the current song and mobility setting, if any.
     var bestScore: SessionScore? {
-        ScoreStore.best(song: selectedSong.id, level: level)
+        ScoreStore.best(song: selectedSong.id, mobility: reachProfile.code)
     }
 
     /// Counts in first; the game screen starts the song when it lands.
@@ -90,7 +90,7 @@ class AppModel {
             good: good,
             date: Date()
         )
-        ScoreStore.record(run, song: selectedSong.id, level: level)
+        ScoreStore.record(run, song: selectedSong.id, mobility: reachProfile.code)
         lastRun = run
         screen = .results
     }
@@ -101,7 +101,15 @@ class AppModel {
     /// meant the field filled itself with spheres the moment the space opened —
     /// including during calibration.
     var mode: FieldMode = .rhythm
-    var level: ReachLevel = .three
+    /// What this session asks of the arm. Each demand is chosen on its own, so
+    /// a patient working on lift alone is not made to accept distance with it.
+    /// Empty is the gentlest session, not an invalid one.
+    var mobility: Set<MobilityDemand> = MobilityDemand.loadSaved() {
+        didSet { MobilityDemand.save(mobility) }
+    }
+
+    /// The same choice, in the form the chart builder wants.
+    var reachProfile: ReachProfile { ReachProfile(mobility) }
     var trainingHand: TrainingHand = .both
     var bpm: Double = 120
 

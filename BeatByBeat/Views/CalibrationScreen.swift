@@ -82,9 +82,10 @@ struct CalibrationScreen: View {
             .padding(.vertical, 18)
         }
         // Sizes to its content rather than scrolling inside a fixed box. The
-        // floor is a floor, not a cap: it stops the panel resizing as the steps
-        // change height, and the pad brings its own 200-odd points when it is
-        // there. Nothing gets swallowed either way.
+        // floor holds the panel steady as the steps change height, which is
+        // distracting mid-capture — it works only because it sits *above* the
+        // tallest step. A floor under the content does not grow the window; it
+        // lets the excess overflow, which is what it did to the song menu.
         .fixedSize(horizontal: false, vertical: true)
         .frame(minWidth: 620, minHeight: showsHandPad ? 820 : 640)
         .sheet(isPresented: $showSettings) {

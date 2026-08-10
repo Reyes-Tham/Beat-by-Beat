@@ -94,7 +94,7 @@ final class SessionRecorder {
     /// doesn't leave an empty session in the history.
     func finish(
         songTitle: String,
-        level: ReachLevel,
+        mobility: Set<MobilityDemand>,
         hand: TrainingHand,
         calibratedSize: SIMD3<Float>,
         points: Int
@@ -121,7 +121,8 @@ final class SessionRecorder {
         return SessionRecord(
             date: Date(),
             songTitle: songTitle,
-            level: level.rawValue,
+            level: mobility.count,
+            mobility: mobility.map(\.rawValue).sorted(),
             hand: hand,
             // Kept in presentation order so the fatigue comparison means
             // "later in the run" rather than "later in a dictionary".

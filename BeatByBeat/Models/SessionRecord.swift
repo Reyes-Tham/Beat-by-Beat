@@ -63,7 +63,12 @@ struct SessionRecord: Codable, Identifiable {
     var id: UUID = UUID()
     var date: Date
     var songTitle: String
+    /// How many demands were on. Kept as a number because records written
+    /// before mobility could be chosen individually stored a level here, and
+    /// those sessions are still worth reading.
     var level: Int
+    /// Exactly which demands were on. Optional for the same reason.
+    var mobility: [String]?
     var hand: TrainingHand
 
     var outcomes: [NoteOutcomeRecord]
@@ -97,6 +102,13 @@ struct SessionRecord: Codable, Identifiable {
         guard calibrated > 0 else { return 0 }
         let used = Double(reachedSize.x * reachedSize.y * reachedSize.z)
         return min(1, used / calibrated)
+    }
+
+    /// What the session asked of the arm, in words.
+    var mobilitySummary: String {
+        guard let mobility else { return "\(level)★" }
+        let demands = mobility.compactMap(MobilityDemand.init(rawValue:))
+        return demands.isEmpty ? "Gentlest setting" : ReachProfile(Set(demands)).summary
     }
 
     var reachTimes: [TimeInterval] { outcomes.compactMap(\.reachTime) }

@@ -280,8 +280,9 @@ struct SettingsView: View {
                     Text(String(format: "%.2f m/s", profile.peakSpeed))
                         .monospacedDigit()
                 }
-                LabeledContent("Suggested level") {
-                    Text(profile.suggestedLevel.displayName)
+                LabeledContent("Suggested start") {
+                    Text(profile.suggestedMobilitySummary)
+                        .multilineTextAlignment(.trailing)
                 }
                 LabeledContent("Captured") {
                     Text(profile.createdAt, style: .relative)

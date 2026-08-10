@@ -199,17 +199,20 @@ struct CalibrationProfile: Codable, Equatable {
 
     var wasTrackingLimited: Bool { !trackingLimitedSteps.isEmpty }
 
-    /// Starting difficulty suggested by how fast the player moved during the
-    /// capture. A suggestion for the therapist, not a decision.
-    var suggestedLevel: ReachLevel {
+    /// Where to start, suggested by how fast the arm moved during the capture.
+    /// A suggestion for the therapist, not a decision — and now a set they can
+    /// take apart rather than a rung they have to accept whole.
+    var suggestedMobility: Set<MobilityDemand> {
         switch peakSpeed {
-        case ..<0.10: .one
-        case ..<0.15: .two
-        case ..<0.22: .three
-        case ..<0.30: .four
-        default: .five
+        case ..<0.10: []
+        case ..<0.15: [.distance]
+        case ..<0.22: [.distance, .height]
+        case ..<0.30: [.distance, .height, .width]
+        default: [.distance, .height, .width, .travel]
         }
     }
+
+    var suggestedMobilitySummary: String { ReachProfile(suggestedMobility).summary }
 
     /// The same reach, moved onto where the patient is sitting now.
     ///

@@ -137,31 +137,44 @@ Real songs carry a **beat map** — a list of absolute beat timestamps extracted
 from the audio, not a constant-tempo grid — so targets land on the beats the
 patient can actually hear, including where the tempo drifts.
 
-### Mobility — five levels
+### Mobility — five independent demands
 
-Ordered by what is genuinely hard after a stroke rather than by how large the
-movement looks. Post-stroke reaching is dominated by synergy coupling, so the
-progression follows that:
+Each is ticked on its own. Nothing ticked is not "no session" — it is the
+gentlest one: short reaches straight ahead at chest height, close in, with the
+longest rests. Every demand opens one axis out from there.
 
-| Level | Space | Movement asked for |
+| Demand | What opens | What it trains |
 | --- | --- | --- |
-| 1★ | Centre, chest height, close in — long rests | Short reaches straight ahead |
-| 2★ | Adds forward distance | Straightening the elbow |
-| 3★ | Adds height | Lifting the arm against gravity |
-| 4★ | Adds width | Reaching away from the body |
-| 5★ | Same space, faster | Moving to time |
+| **Reach further** | Targets further out in front | Elbow extension |
+| **Reach higher** | Targets higher up | Shoulder flexion against gravity |
+| **Reach wider** | Targets out to the side | Shoulder abduction |
+| **Bigger steps** | Longer distances between targets | Coordination |
+| **Move faster** | Less time to get there, shorter rests | Speed and timing |
 
-**Reach demand and speed demand are kept separate.** Levels 1–4 differ in space
-only; every one of them gives 8 beats to travel. Only level 5 shortens that, to
-4. Nobody is asked to move further *and* faster at once.
+This replaced a 1–5 ladder where each level added the next demand on top of the
+last, so asking for height meant accepting distance with it. Recovery does not
+arrive in that order for everybody: an arm can have usable forward reach and no
+lift at all, or the reverse, and a therapist working on one direction had no way
+to ask for it alone.
 
-**Rest shortens as levels rise** — 8 beats at level 1, 6 at level 2, 4 above
-that, and never zero. Tolerance for sustained work is itself part of what
-recovers, so it is trained rather than assumed.
+The ladder's ordering is still the right *advice* — forward and near the midline
+moves with the extensor synergy and is easiest; lifting and reaching wide have
+to break out of the flexor synergy, and abduction loading costs elbow extension
+range on top. It is now advice rather than a rail.
 
-A level is also *suggested* after calibration, from the fastest comfortable
-speed observed during the capture. It is a suggestion for the therapist, not a
-decision.
+**Rest shortens as more is asked for** — 8 beats with nothing ticked, 6 with one
+or two, 4 above that, and never zero. Tolerance for sustained work is itself
+part of what recovers, so it is trained rather than assumed.
+
+**Speed on top of most of the space says so.** The ladder never raised space and
+speed together; nothing now stops a therapist doing it, but ticking speed
+alongside three spatial demands puts a note on screen rather than enforcing the
+restraint silently.
+
+A starting set is also *suggested* after calibration, from the fastest
+comfortable speed observed during the capture. A suggestion for the therapist,
+not a decision — and a set they can take apart rather than a rung to accept
+whole.
 
 ### Which arm
 

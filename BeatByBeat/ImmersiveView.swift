@@ -41,7 +41,7 @@ struct ImmersiveView: View {
             // `appModel.bpm = ...` re-enter configure and wipe the field on the
             // first Play.
             .onChange(of: appModel.mode) { configure() }
-            .onChange(of: appModel.level) { configure() }
+            .onChange(of: appModel.mobility) { configure() }
             .onChange(of: appModel.respawnRequests) { configure() }
             .onChange(of: appModel.layout) { configure() }
             .onChange(of: appModel.trainingHand) { configure() }
@@ -197,7 +197,7 @@ struct ImmersiveView: View {
                 // screen shows and the record the history keeps agree.
                 if let session = recorder.finish(
                     songTitle: appModel.selectedSong.title,
-                    level: appModel.level,
+                    mobility: appModel.mobility,
                     hand: appModel.trainingHand,
                     calibratedSize: appModel.volume.size,
                     points: appModel.livePoints
@@ -519,13 +519,13 @@ struct ImmersiveView: View {
             let song = appModel.selectedSong
             let beatMap = song.beatMapResource.flatMap { BeatMap.load(resource: $0) }
             let chart = beatMap.map {
-                Chart.build(from: $0, level: appModel.level, hand: appModel.trainingHand,
+                Chart.build(from: $0, profile: appModel.reachProfile, hand: appModel.trainingHand,
                             movements: appModel.enabledMovements,
                             gripOrientations: appModel.enabledGripOrientations,
                             speedScale: appModel.developerMode ? appModel.developerSpeed : 1)
             } ?? Chart.generated(
                 bpm: song.bpm,
-                level: appModel.level,
+                profile: appModel.reachProfile,
                 hand: appModel.trainingHand,
                 movements: appModel.enabledMovements,
                 gripOrientations: appModel.enabledGripOrientations,

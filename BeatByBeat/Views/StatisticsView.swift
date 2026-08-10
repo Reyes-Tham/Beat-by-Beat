@@ -57,7 +57,9 @@ struct StatisticsView: View {
             .padding(.vertical, 16)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .frame(minWidth: 980, minHeight: 820)
+        // Height comes from the content, not a floor — see the note in
+        // SongSelectionView about what a minimum does and does not do.
+        .frame(minWidth: 980)
         .onAppear {
             record = PatientStore.load()
             index = max(0, record.sessions.count - 1)
@@ -81,7 +83,7 @@ struct StatisticsView: View {
                 Text(session == nil ? "Statistics" : "Session \(index + 1)")
                     .font(.title)
                 if let session {
-                    Text("\(session.songTitle) · \(session.level)★ · \(session.hand.displayName)")
+                    Text("\(session.songTitle) · \(session.mobilitySummary) · \(session.hand.displayName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

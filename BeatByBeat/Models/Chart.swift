@@ -126,7 +126,7 @@ extension Chart {
     /// notes land on detected beats rather than on interpolated ones.
     static func build(
         from beatMap: BeatMap,
-        level: ReachLevel,
+        profile: ReachProfile,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
         gripOrientations: Set<GripOrientation> = [.cup],
@@ -141,8 +141,8 @@ extension Chart {
         let beats = beatMap.beats
         // Floors of 1 and 2: a chart with zero travel would spawn targets on
         // top of their own beat, and zero spacing would never advance.
-        let travelBeats = max(1, Int(level.travelBeats / speedScale))
-        let spacing = max(2, Int(level.spacingBeats / speedScale))
+        let travelBeats = max(1, Int(profile.travelBeats / speedScale))
+        let spacing = max(2, Int(profile.spacingBeats / speedScale))
 
         var notes: [ChartNote] = []
         // One cursor per arm, so each arm's successive targets relate to each
@@ -156,10 +156,10 @@ extension Chart {
             let noteHand: TrainingHand = hand == .both
                 ? (placed.isMultiple(of: 2) ? .left : .right)
                 : hand
-            let box = UnitBox(level: level, hand: noteHand)
+            let box = UnitBox(profile: profile, hand: noteHand)
             let position = step(
                 from: cursors[noteHand] ?? box.centre,
-                maxStep: level.maxStep,
+                maxStep: profile.maxStep,
                 within: box
             )
             cursors[noteHand] = position
@@ -206,10 +206,10 @@ extension Chart {
         var y: ClosedRange<Float>
         var z: ClosedRange<Float>
 
-        init(level: ReachLevel, hand: TrainingHand) {
-            x = level.horizontalRange(for: hand)
-            y = level.heightRange
-            z = level.depthRange
+        init(profile: ReachProfile, hand: TrainingHand) {
+            x = profile.horizontalRange(for: hand)
+            y = profile.heightRange
+            z = profile.depthRange
         }
 
         var centre: SIMD3<Float> {
@@ -228,7 +228,7 @@ extension Chart {
     /// Fallback for when no beat map is bundled: a plain constant-tempo grid.
     static func generated(
         bpm: Double,
-        level: ReachLevel,
+        profile: ReachProfile,
         hand: TrainingHand,
         movements: Set<MovementType> = [.reach],
         gripOrientations: Set<GripOrientation> = [.cup],
@@ -242,7 +242,7 @@ extension Chart {
             bpm: bpm,
             beats: (0..<count).map { Double($0) * beatDuration }
         )
-        return build(from: synthetic, level: level, hand: hand,
+        return build(from: synthetic, profile: profile, hand: hand,
                      movements: movements, gripOrientations: gripOrientations,
                      speedScale: speedScale)
     }

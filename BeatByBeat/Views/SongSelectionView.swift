@@ -102,7 +102,12 @@ struct SongSelectionView: View {
         // the Play button off the bottom. A minimum alone could not fix that:
         // a minimum permits a taller window without asking for one.
         .fixedSize(horizontal: false, vertical: true)
-        .frame(minWidth: 1130, minHeight: 780)
+        // No minimum height. `frame(minHeight:)` reports max(proposal,
+        // minimum) — it does not grow to fit a child that wants more, so a
+        // floor below the content silently lets the rest overflow the window.
+        // Fixing the height vertically is what makes the natural size the ideal
+        // size, and a window that sizes to content follows that.
+        .frame(minWidth: 1130)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
         }
@@ -261,7 +266,7 @@ struct SongSelectionView: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-                Text("No runs yet at \(appModel.level.displayName)")
+                Text("No runs yet at this setting")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
@@ -291,9 +296,10 @@ struct SongSelectionView: View {
                 Text(song.movementFocus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(appModel.level.focus)
+                Text(appModel.reachProfile.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -417,34 +423,81 @@ struct SongSelectionView: View {
     }
 
     private var mobility: some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 14) {
             Text("Mobility")
                 .font(.headline)
                 .frame(width: 92, alignment: .leading)
+                .padding(.top, 6)
 
-            HStack(spacing: 12) {
-                ForEach(ReachLevel.allCases) { level in
-                    Button {
-                        appModel.level = level
-                    } label: {
-                        Diamond()
-                            .fill(level.rawValue <= appModel.level.rawValue
-                                  ? AnyShapeStyle(.yellow)
-                                  : AnyShapeStyle(.clear))
-                            .overlay(Diamond().stroke(.white.opacity(0.8), lineWidth: 2))
-                            .frame(width: 36, height: 36)
+            // Each demand on its own, rather than a ladder where asking for
+            // height meant accepting distance with it. Nothing ticked is the
+            // gentlest session, not an invalid one.
+            VStack(alignment: .leading, spacing: 8) {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
+                    spacing: 10
+                ) {
+                    ForEach(MobilityDemand.allCases) { demand in
+                        demandCard(demand)
                     }
-                    .buttonStyle(.plain)
-                    .hoverEffect()
-                    .accessibilityLabel(Text("\(level.rawValue) star"))
+                }
+
+                Text(appModel.reachProfile.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if appModel.reachProfile.pushesSpaceAndSpeed {
+                    // Not a block. The ladder never raised space and speed
+                    // together, and someone ticking everything should see that
+                    // said once rather than have it quietly enforced.
+                    Label("Speed on top of most of the space is a lot to ask at "
+                          + "once — worth adding one at a time.",
+                          systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Text(appModel.level.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
         }
+    }
+
+    /// One demand, tickable on its own. Same card as the movements above it,
+    /// because they are the same kind of choice — what this session asks for.
+    private func demandCard(_ demand: MobilityDemand) -> some View {
+        let isOn = appModel.mobility.contains(demand)
+        return Button {
+            if isOn {
+                appModel.mobility.remove(demand)
+            } else {
+                appModel.mobility.insert(demand)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(demand.displayName)
+                        .font(.callout)
+                    Text(demand.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(demand.clinicalTerm.uppercased())
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
+        .hoverEffect()
     }
 }
 
