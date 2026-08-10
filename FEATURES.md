@@ -131,6 +131,7 @@ Five tracks, each with a note about the movement it suits:
 | Afro Vibes | 117.4 BPM | Slower pulse, long recovery between reaches |
 | Tung Tung Sahur | 130.9 BPM | Brisk and even, steady alternating reaches |
 | Tralalero Tralala | 138.1 BPM | Quick pulse, short bursts of movement |
+| Singapore Parade | 120.0 BPM | Marching pulse — the most predictable timing here |
 | Slow Steady | 60 BPM, silent | Long single reaches, maximum rest |
 
 Real songs carry a **beat map** — a list of absolute beat timestamps extracted

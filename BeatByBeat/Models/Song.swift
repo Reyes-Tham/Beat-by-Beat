@@ -67,6 +67,15 @@ struct Song: Identifiable, Hashable {
             duration: 81
         ),
         Song(
+            id: "singapore_parade",
+            title: "Singapore Parade",
+            movementFocus: "Marching pulse — the most predictable timing here",
+            bpm: 119.99,
+            audioResource: "singapore_parade",
+            beatMapResource: "singapore_parade_beats",
+            duration: 144
+        ),
+        Song(
             id: "steady_60",
             title: "Slow Steady",
             movementFocus: "Long single reaches, maximum rest",
