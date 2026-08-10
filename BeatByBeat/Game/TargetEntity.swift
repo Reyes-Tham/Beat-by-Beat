@@ -640,7 +640,12 @@ enum TargetEntity {
     /// dismantling children, makes the removal final.
     static func destroy(_ entity: Entity) {
         entity.stopAllAnimations(recursive: true)
-        for child in entity.children.reversed() {
+        // Snapshot first. `children` is a live view of the entity's children
+        // and `removeFromParent` mutates it, so walking it while destroying
+        // steps an index through a collection that is shrinking underneath —
+        // the same defect that once trapped in the heatmap, and here it runs
+        // for every entity torn down.
+        for child in Array(entity.children) {
             destroy(child)
         }
         entity.components.removeAll()

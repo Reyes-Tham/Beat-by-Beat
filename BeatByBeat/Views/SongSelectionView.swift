@@ -31,6 +31,12 @@ struct SongSelectionView: View {
     @Binding var showSettings: Bool
 
     @State private var selectedIndex = 0
+    /// Read once per change rather than per body pass.
+    ///
+    /// `appModel.bestScore` reaches into UserDefaults and decodes JSON, and it
+    /// sat in the body — so every layout pass paid for it, and a screen that
+    /// lays out repeatedly while a window resizes paid for it repeatedly.
+    @State private var best: SessionScore?
 
     private var songs: [Song] { Song.catalog }
     private var song: Song { songs[selectedIndex] }
@@ -110,8 +116,13 @@ struct SongSelectionView: View {
         .frame(minWidth: 1130)
         .onAppear {
             selectedIndex = songs.firstIndex(of: appModel.selectedSong) ?? 0
+            best = appModel.bestScore
         }
-        .onChange(of: selectedIndex) { appModel.selectedSong = song }
+        .onChange(of: selectedIndex) {
+            appModel.selectedSong = song
+            best = appModel.bestScore
+        }
+        .onChange(of: appModel.mobility) { best = appModel.bestScore }
     }
 
     /// Says where the workspace came from. Measured and set-by-hand play very
@@ -254,7 +265,7 @@ struct SongSelectionView: View {
                 .padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 10).fill(.thinMaterial))
 
-            if let best = appModel.bestScore {
+            if let best {
                 HStack(spacing: 10) {
                     Text("\(best.points)")
                         .font(.title2)

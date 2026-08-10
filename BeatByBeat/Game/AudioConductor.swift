@@ -120,11 +120,24 @@ final class AudioConductor {
 
     func stop() {
         guard isRunning else { return }
-        if player.isPlaying { player.stop() }
-        if engine.isRunning { engine.pause() }
-        engine.mainMixerNode.outputVolume = 1
+        // Flipped first, so anything reading these — the tick, the countdown
+        // bar — sees a stopped conductor immediately rather than waiting on
+        // the audio hardware.
         isRunning = false
         hasAudio = false
+
+        // Off the main actor. Stopping a player node waits for the render
+        // thread to come back, and leaving the game does it in the same turn
+        // as tearing down every live target and resizing the window — which is
+        // the whole of what "the app hangs going back to the songs menu"
+        // looked like.
+        let player = self.player
+        let engine = self.engine
+        Task.detached(priority: .userInitiated) {
+            if player.isPlaying { player.stop() }
+            if engine.isRunning { engine.pause() }
+            engine.mainMixerNode.outputVolume = 1
+        }
     }
 
     private func configureSession() throws {

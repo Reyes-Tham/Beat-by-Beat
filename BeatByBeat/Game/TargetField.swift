@@ -108,7 +108,8 @@ final class TargetField {
     /// Destroys every live target. Used by reset, and when a song stops so
     /// nothing is left floating in the scene.
     func clearTargets() {
-        for child in root.children.reversed()
+        // Snapshotted for the reason given on `TargetEntity.destroy`.
+        for child in Array(root.children)
         where child !== outline && child !== effects {
             TargetEntity.destroy(child)
         }
@@ -533,7 +534,7 @@ final class TargetField {
     // MARK: - Debug outline
 
     func redrawOutline() {
-        outline.children.reversed().forEach { TargetEntity.destroy($0) }
+        Array(outline.children).forEach { TargetEntity.destroy($0) }
         for corner in volume.corners {
             let dot = TargetEntity.makeDebugDot()
             dot.position = corner

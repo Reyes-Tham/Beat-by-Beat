@@ -348,7 +348,7 @@ struct ImmersiveView: View {
         if calibration.phase == .capturing, !confirmRoot.children.isEmpty {
             // Circle belongs to the confirm step only; clear it when the next
             // arm starts its six directions.
-            for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
+            for child in Array(confirmRoot.children) { TargetEntity.destroy(child) }
         }
         finishCalibrationIfDone()
 
@@ -400,7 +400,7 @@ struct ImmersiveView: View {
 
     private func showConfirmCircle() {
         guard let position = calibration.confirmCircle else { return }
-        for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
+        for child in Array(confirmRoot.children) { TargetEntity.destroy(child) }
         let circle = TargetEntity.makeConfirmCircle()
         circle.position = position
         confirmRoot.addChild(circle)
@@ -409,7 +409,7 @@ struct ImmersiveView: View {
     /// Eight dots showing the box captured so far, so the patient and the
     /// therapist can both see the range growing as they move.
     private func buildReachPreview() {
-        for child in previewRoot.children.reversed() { TargetEntity.destroy(child) }
+        for child in Array(previewRoot.children) { TargetEntity.destroy(child) }
         for _ in 0..<8 {
             let dot = TargetEntity.makeDebugDot(radius: 0.016)
             dot.isEnabled = false
@@ -428,8 +428,8 @@ struct ImmersiveView: View {
     }
 
     private func clearCalibrationScene() {
-        for child in confirmRoot.children.reversed() { TargetEntity.destroy(child) }
-        for child in previewRoot.children.reversed() { TargetEntity.destroy(child) }
+        for child in Array(confirmRoot.children) { TargetEntity.destroy(child) }
+        for child in Array(previewRoot.children) { TargetEntity.destroy(child) }
     }
 
     private func publishCalibrationState() {
@@ -542,11 +542,11 @@ struct ImmersiveView: View {
             conductor.start(song: song)
             appModel.audioIsPlaying = conductor.hasAudio
         } else {
-            conductor.stop()
-            scheduler.rewind()
+            Diagnostics.time("conductor.stop") { conductor.stop() }
+            Diagnostics.time("scheduler.rewind") { scheduler.rewind() }
             // Without this, stopping mid-song left every in-flight target
             // hanging in the scene with no clock to expire it.
-            field.clearTargets()
+            Diagnostics.time("clearTargets") { field.clearTargets() }
             appModel.audioIsPlaying = false
         }
     }

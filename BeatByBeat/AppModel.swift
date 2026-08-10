@@ -74,8 +74,10 @@ class AppModel {
     }
 
     func backToSongs() {
-        isPlaying = false
-        screen = .songSelection
+        Diagnostics.time("backToSongs") {
+            isPlaying = false
+            screen = .songSelection
+        }
     }
 
     /// Files the run that just ended and shows the summary.
