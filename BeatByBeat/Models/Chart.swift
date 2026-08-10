@@ -137,7 +137,12 @@ extension Chart {
                                         : MovementType.allCases.filter(movements.contains)
         let grips = gripOrientations.isEmpty ? [GripOrientation.cup]
                                              : GripOrientation.allCases.filter(gripOrientations.contains)
-        var gripIndex = 0
+        // One bag per arm rather than one shared: this way each arm is
+        // handed every selected movement, which is what a therapist ticking
+        // three of them is asking for. A shared bag only evens out across the
+        // pair, so one arm could still see far more of one movement.
+        var movementBags: [TrainingHand: ShuffleBag<MovementType>] = [:]
+        var gripBag = ShuffleBag(grips)
         let beats = beatMap.beats
         // Floors of 1 and 2: a chart with zero travel would spawn targets on
         // top of their own beat, and zero spacing would never advance.
@@ -164,15 +169,17 @@ extension Chart {
             )
             cursors[noteHand] = position
 
-            // Cycled rather than random so every selected movement gets an
-            // even share and none can go missing from a short run.
-            let movement = palette[placed % palette.count]
-            // Cycled independently of the movement palette, so each selected
-            // orientation still comes round evenly when grips are sparse.
+            // Drawn from a shuffled bag, not cycled. Cycling walked the
+            // palette in step with the alternating hands, so with two
+            // movements ticked one arm got every pour and the other every
+            // reach, for the whole song.
+            var bag = movementBags[noteHand] ?? ShuffleBag(palette)
+            let movement = bag.next() ?? .reach
+            movementBags[noteHand] = bag
+
             var orientation: GripOrientation?
             if movement == .grip {
-                orientation = grips[gripIndex % grips.count]
-                gripIndex += 1
+                orientation = gripBag.next()
             }
             // Travel spans real beats, so it tracks any tempo drift in the
             // song instead of assuming a constant period. Capped at the gap to
