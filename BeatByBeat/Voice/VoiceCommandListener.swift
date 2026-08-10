@@ -43,9 +43,24 @@ final class VoiceCommandListener {
 
     @ObservationIgnored var onCommand: ((VoiceCommand) -> Void)?
 
+    /// Holds whichever request the microphone tap should feed.
+    ///
+    /// The tap runs on the audio thread and a recognition pass is replaced
+    /// every time a command fires, so the tap cannot close over one request
+    /// directly — it would keep feeding the pass that already ended. Swapping
+    /// the reference in a box lets the tap stay installed across restarts, and
+    /// a pointer swap is the whole of the race.
+    private final class RequestBox: @unchecked Sendable {
+        var request: SFSpeechAudioBufferRecognitionRequest?
+    }
+
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let engine = AVAudioEngine()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private let box = RequestBox()
+    private var request: SFSpeechAudioBufferRecognitionRequest? {
+        get { box.request }
+        set { box.request = newValue }
+    }
     private var task: SFSpeechRecognitionTask?
     private var lastFired: [VoiceCommand: Date] = [:]
     private var isRunning = false
@@ -69,7 +84,7 @@ final class VoiceCommandListener {
         }
 
         do {
-            try beginListening()
+            try await beginListening()
             isRunning = true
             status = .listening
         } catch {
@@ -83,16 +98,21 @@ final class VoiceCommandListener {
         task = nil
         request?.endAudio()
         request = nil
-
-        if engine.isRunning { engine.stop() }
-        engine.inputNode.removeTap(onBus: 0)
         isRunning = false
         heard = ""
         if status == .listening { status = .off }
 
-        // Handed back so a song plays through a plain playback session rather
-        // than the record-capable one the microphone needs.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        // Off the main actor for the same reason as starting: stopping an
+        // engine and handing the session back both block, and doing it on the
+        // way out of a screen froze the app there.
+        let engine = self.engine
+        Task.detached(priority: .userInitiated) {
+            if engine.isRunning { engine.stop() }
+            engine.inputNode.removeTap(onBus: 0)
+            // Handed back so a song plays through a plain playback session
+            // rather than the record-capable one the microphone needs.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        }
     }
 
     private func requestPermissions() async -> Bool {
@@ -108,25 +128,39 @@ final class VoiceCommandListener {
 
     // MARK: - Listening
 
-    private func beginListening() throws {
-        let session = AVAudioSession.sharedInstance()
-        // Measurement mode turns off the processing meant for calls, which
-        // otherwise gates and shapes exactly the quiet speech this has to hear.
-        try session.setCategory(.playAndRecord, mode: .measurement)
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+    /// Claims the microphone, off the main actor.
+    ///
+    /// Every call in here blocks: activating an audio session takes as long as
+    /// it takes, and starting an engine right after another one was torn down
+    /// can take a good deal longer. Run on the main actor — which is where a
+    /// screen change puts it — that stalls the whole interface, and the app
+    /// appeared to hang on the way back to the songs menu. Nothing here needs
+    /// the main actor; only the state afterwards does.
+    private func beginListening() async throws {
+        let engine = self.engine
+        let box = self.box
+        try await Task.detached(priority: .userInitiated) {
+            let session = AVAudioSession.sharedInstance()
+            // Measurement mode turns off the processing meant for calls, which
+            // otherwise gates and shapes exactly the quiet speech this has to
+            // hear.
+            try session.setCategory(.playAndRecord, mode: .measurement)
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
 
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            // Called on the audio thread. Appending a buffer is what this
-            // request is for, and hopping to the main actor first would put a
-            // scheduler between the microphone and the recogniser.
-            self?.request?.append(buffer)
-        }
+            let input = engine.inputNode
+            let format = input.outputFormat(forBus: 0)
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+                // Called on the audio thread. Appending a buffer is what the
+                // request is for, and hopping to the main actor first would put
+                // a scheduler between the microphone and the recogniser.
+                box.request?.append(buffer)
+            }
 
-        engine.prepare()
-        try engine.start()
+            engine.prepare()
+            try engine.start()
+        }.value
+
         listen()
     }
 

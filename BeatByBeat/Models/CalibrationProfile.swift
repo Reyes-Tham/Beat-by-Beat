@@ -62,13 +62,39 @@ struct ArmBoundary: Codable, Equatable {
 
         // A degenerate axis would make every target unreachable, so hold a
         // floor. Hitting it means that direction wasn't really captured.
-        let size = simd_max(hi - lo, SIMD3<Float>(0.20, 0.18, 0.12))
+        var size = simd_max(hi - lo, SIMD3<Float>(0.20, 0.18, 0.12)) * safetyScale
+        var centre = frame.toLocal(frame.toWorld((lo + hi) / 2))
+
+        // The near end is trimmed, not the whole box pushed out.
+        //
+        // The capture includes a reach *back toward the body*, so the box it
+        // fits ends at the chest and targets can land close enough in to feel
+        // cramped. Shifting the whole box forward would fix that by moving the
+        // far face past what was actually measured. Taking the clearance off
+        // the near end instead leaves the far limit exactly where the patient
+        // put it, and nothing lands where they cannot get to it.
+        //
+        // Capped as a fraction of depth so a shallow workspace is not swallowed
+        // by a fixed number.
+        let clearance = min(Self.bodyClearance, size.z * 0.35)
+        size.z -= clearance
+        // -Z is away from the patient, so this moves the box off the body.
+        centre.z -= clearance / 2
+
         return SpawnVolume(
-            center: frame.toWorld((lo + hi) / 2),
-            size: size * safetyScale,
+            center: frame.toWorld(centre),
+            size: size,
             yaw: frame.yaw
         )
     }
+
+    /// How far off the body the near face of the workspace is held, metres.
+    ///
+    /// Reaching to a target sitting against your own chest is neither a
+    /// rehabilitation movement nor a comfortable one — the elbow has nowhere to
+    /// go. The therapist can still nudge it either way from the workspace
+    /// sliders; this is only where a capture starts.
+    static let bodyClearance: Float = 0.08
 }
 
 /// Where the patient's head was when a capture was made.

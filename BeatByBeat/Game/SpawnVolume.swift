@@ -39,7 +39,7 @@ struct SpawnVolume {
     /// a real axis: level 2 adds forward distance to demand elbow extension,
     /// and a 25 cm box left barely 10 cm of travel to work with.
     static let fixed = SpawnVolume(
-        center: [0, 1.25, -0.55],
+        center: [0, 1.25, -0.60],
         size:   [0.80, 0.60, 0.35]
     )
 
