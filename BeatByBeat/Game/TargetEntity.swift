@@ -195,6 +195,36 @@ enum TargetEntity {
     /// Number of waypoints along a pour path.
     nonisolated static let pourWaypoints = 5
 
+    /// The arc a pour follows, as offsets from the target's position.
+    ///
+    /// Starts on the arm's own side and sweeps across toward the midline,
+    /// which is the way a jug is actually tipped — you bring it in from your
+    /// own side and pour into something in front of you.
+    ///
+    /// It ran the other way, which mirrored both arms wrongly: the hand began
+    /// the movement already across the body, the hardest place a hemiparetic
+    /// arm can start from, and finished in the easy one. A movement should not
+    /// open in the position it is meant to build up to.
+    nonisolated static func pourPath(for hand: TrainingHand) -> [SIMD3<Float>] {
+        // +X is the player's right, so the left arm starts negative and the
+        // right arm starts positive: each begins on its own side.
+        let ownSide: Float = hand == .left ? -1 : 1
+        let span: Float = 0.30
+
+        return (0..<pourWaypoints).map { step in
+            let t = Float(step) / Float(pourWaypoints - 1)
+            return SIMD3<Float>(
+                // Starts at +half a span on the arm's own side and finishes
+                // the same distance past the midline.
+                (0.5 - t) * span * ownSide,
+                // Lifts and comes forward through the middle of the sweep, so
+                // it is a tipping arc rather than a slide.
+                sin(t * .pi) * 0.10,
+                -sin(t * .pi) * 0.04
+            )
+        }
+    }
+
     /// A curved tube the hand is guided along, waypoint by waypoint.
     ///
     /// An arc rather than a straight line: pouring is a controlled trajectory
@@ -207,19 +237,7 @@ enum TargetEntity {
         let root = Entity()
         root.name = "Pour[\(hand.rawValue)#\(noteIndex)]"
 
-        // Arc sweeps across the body and lifts in the middle, mirrored so each
-        // arm curves outward from its own side.
-        let direction: Float = hand == .left ? -1 : 1
-        let span: Float = 0.30
-        var points: [SIMD3<Float>] = []
-        for step in 0..<pourWaypoints {
-            let t = Float(step) / Float(pourWaypoints - 1)
-            points.append([
-                (t - 0.5) * span * direction,
-                sin(t * .pi) * 0.10,
-                -sin(t * .pi) * 0.04
-            ])
-        }
+        let points = pourPath(for: hand)
 
         for (index, point) in points.enumerated() {
             let node = ModelEntity(

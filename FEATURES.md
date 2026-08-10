@@ -188,8 +188,10 @@ Any combination of five, chosen per session:
 
 - **Reach** — move the hand to a target.
 - **Pour** — guide the hand along a curved path through waypoints, as in tipping
-  a jug. The target only retires when the whole path has been followed, so the
-  trajectory is the exercise, not the endpoint.
+  a jug. Each arm starts on its own side and sweeps across toward the midline,
+  which is the way a jug is actually tipped. The target only retires when the
+  whole path has been followed, so the trajectory is the exercise, not the
+  endpoint.
 - **Grip** — close the hand on the target. Grip is treated as a *movement*, not
   a pose: the open hand has to be seen at the target first, and only then does
   closing score. A fist arriving already closed does not count.
